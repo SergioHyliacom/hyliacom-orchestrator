@@ -1,6 +1,8 @@
-// The plugin keeps to the project's CONTRIBUTING.md: every pull request needs another person, the story branch is
-// feature/<id>-<slug>, the orchestrator's files live outside git (.git/info/exclude), the architecture decisions are
-// the ADRs, and the Go tests are read from `go test -json`.
+// The plugin keeps to the project's norms and to the defaults it gives when they say nothing: no push or merge goes
+// through on its own when allowPush is false (Bitbucket's API and GitHub's gh alike), the story branch is
+// feature/<id>-<slug>, the orchestrator's files live outside git (.git/info/exclude), the project's norms and ADRs are
+// protected, the integration branch defaults to the remote's, and the architecture decisions are the ADRs in their
+// usual formats.
 // Run with: node --test "tests/*.test.mjs"
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -13,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.resolve(HERE, "..", "hooks", "guard.mjs");
 const STORIES = path.resolve(HERE, "..", "scripts", "stories.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 
 const STORY = ({ tags = [], blockedBy = [], marker = "[unbuilt]" } = {}) => `---
 id: PRU-9
@@ -44,9 +46,9 @@ pnpm test:go
 ## Open questions
 `;
 
-// A repository like easyone: the orchestrator's files under .orchestrator/, excluded on this machine only.
+// A shared repository: the orchestrator's files under .orchestrator/, excluded on this machine only.
 function project({ orchestrator = {}, story = {}, tests } = {}) {
-  const dir = mkdtempSync(path.join(tmpdir(), "easyone-norms-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "orchestrator-norms-"));
   const write = (rel, text) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), text); };
   const git = (...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir, stdio: "ignore" });
   git("init", "-q", "-b", "develop");
@@ -75,14 +77,55 @@ function project({ orchestrator = {}, story = {}, tests } = {}) {
 }
 const asks = (r) => r.status === 0 && /"permissionDecision":"ask"/.test(r.stdout);
 
-test("no hay ramas que se suban o se fusionen solas: chore/check- también pregunta", () => {
+test("with allowPush false, every push and every merge asks, on Bitbucket and on GitHub", () => {
   const p = project();
-  p.git("switch", "-q", "-c", "chore/check-sql");
+  p.git("switch", "-q", "-c", "feature/check-sql");
   const bash = (command) => p.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
-  assert.ok(asks(bash("git push -u origin chore/check-sql")), "el push de una comprobación pregunta");
-  assert.ok(asks(bash("git push origin feature/pru-9-save-note")), "el push de una historia pregunta");
-  const merge = bash(`curl -s -X POST -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" https://api.bitbucket.org/2.0/repositories/hyliacom/easyone/pullrequests/7/merge --data-binary @-`);
-  assert.ok(asks(merge), merge.stdout + merge.stderr);
+  assert.ok(asks(bash("git push -u origin feature/check-sql")), "a check's push asks");
+  assert.ok(asks(bash("git push origin feature/pru-9-save-note")), "a story's push asks");
+  const bitbucket = bash(`curl -s -X POST -u "$BITBUCKET_USER:$BITBUCKET_TOKEN" https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7/merge --data-binary @-`);
+  assert.ok(asks(bitbucket), bitbucket.stdout + bitbucket.stderr);
+  assert.ok(asks(bash("gh pr merge 12 --squash --subject 'feat(notes): PRU-9 guardar una nota' --delete-branch")), "gh pr merge asks");
+  assert.ok(asks(bash("gh -R acme/app pr merge 12 --squash")), "gh with a repo flag asks too");
+  assert.ok(asks(bash("gh api -X PUT repos/acme/app/pulls/12/merge -f merge_method=squash")), "the REST merge asks");
+  const view = bash("gh pr view 12 --json reviews");
+  assert.ok(!asks(view) && view.status === 0, "reading a pull request does not ask");
+});
+
+test("a role agent never merges, through gh either", () => {
+  const p = project();
+  p.git("switch", "-q", "-c", "feature/pru-9-save-note");
+  const r = p.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", agent_id: "a1", agent_type: BUILDER, tool_input: { command: "gh pr merge 12 --squash" } });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /role agents never merge/);
+});
+
+test("the project's norms from .orchestrator.json are protected; without the list, the usual ones and the ADRs", () => {
+  // The builder may write everywhere these tests touch, so only the protected gate can stop it.
+  const roles = { builder: { paths: ["modules/", "docs/", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md"], onStop: [] } };
+  const edit = (p, file) => p.guard({ hook_event_name: "PreToolUse", tool_name: "Edit", agent_id: "a1", agent_type: BUILDER,
+    tool_input: { file_path: path.join(p.dir, file), old_string: "a", new_string: "b" } });
+  const blocked = (r) => r.status === 2 && /one of the project's norms/.test(r.stderr);
+  const listed = project({ orchestrator: { roles, gates: { protected: "enforce" }, norms: ["docs/standards/", "CONTRIBUTING.md"] } });
+  listed.git("switch", "-q", "-c", "feature/pru-9-save-note");
+  assert.ok(blocked(edit(listed, "docs/standards/php.md")), "a folder of norms");
+  assert.ok(blocked(edit(listed, "CONTRIBUTING.md")));
+  assert.ok(blocked(edit(listed, "docs/adr/0001-x.md")), "the ADRs always");
+  assert.equal(edit(listed, "AGENTS.md").status, 0, "the list replaces the usual ones");
+  const usual = project({ orchestrator: { roles, gates: { protected: "enforce" } } });
+  usual.git("switch", "-q", "-c", "feature/pru-9-save-note");
+  assert.ok(blocked(edit(usual, "AGENTS.md")));
+  assert.ok(blocked(edit(usual, "CLAUDE.md")));
+  assert.equal(edit(usual, "docs/standards/php.md").status, 0, "not a norm unless listed");
+});
+
+test("without integrationBranch, the integration branch is the remote's default", () => {
+  const p = project({ orchestrator: { git: { allowPush: false } } });
+  p.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop");
+  p.git("switch", "-q", "develop");
+  const commit = p.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "git commit -m 'x'" } });
+  assert.equal(commit.status, 2, "develop is protected as the integration branch");
+  assert.match(commit.stderr, /commits on develop are blocked/);
 });
 
 test("una historia fuera de git: el builder que la cambia lo cuenta al parar", () => {
@@ -150,18 +193,28 @@ test("blocked_by cita un ADR: propuesto bloquea la historia, aceptado no", () =>
   assert.match(p.stories().stderr, /decision ADR-0024 does not exist \(no docs\/adr\/0024-\*\.md\)/);
 });
 
+test("an ADR's status is read in its usual formats", () => {
+  const p = project({ story: { blockedBy: ["ADR-0023"] } });
+  const ready = (text) => { p.write("docs/adr/0023-encrypted-notes.md", text); return p.stories("--ready", "PRU-9").status; };
+  assert.equal(ready("# 23. Encrypted notes\n\nStatus: Proposed\n"), 1);
+  assert.equal(ready("# 23. Encrypted notes\n\nStatus: Accepted\n"), 0);
+  assert.equal(ready("---\nstatus: proposed\n---\n# Encrypted notes\n"), 1);
+  assert.equal(ready("# Encrypted notes\n\n## Status\n\nProposed\n\n## Context\n"), 1);
+  assert.equal(ready("# Encrypted notes\n\n## Status\n\n**Accepted**\n"), 0);
+});
+
 test("los tests de Go se leen de go test -json: un subtest saltado no cuenta como verde", () => {
   const events = (action) => [
-    { Action: "run", Package: "easyone/modules/notes", Test: "TestSave" },
-    { Action: "run", Package: "easyone/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text" },
-    { Action: "output", Package: "easyone/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text", Output: "--- PASS\n" },
-    { Action: action, Package: "easyone/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text" },
-    { Action: "pass", Package: "easyone/modules/notes", Test: "TestSave" },
+    { Action: "run", Package: "acme/app/modules/notes", Test: "TestSave" },
+    { Action: "run", Package: "acme/app/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text" },
+    { Action: "output", Package: "acme/app/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text", Output: "--- PASS\n" },
+    { Action: action, Package: "acme/app/modules/notes", Test: "TestSave/[PRU-9.1]_keeps_the_text" },
+    { Action: "pass", Package: "acme/app/modules/notes", Test: "TestSave" },
   ].map((e) => JSON.stringify(e)).join("\n");
   const p = project({ story: { marker: "[test]" }, tests: [{ command: "node gotest.mjs > {report}", format: "go-json" }] });
   p.write(".orchestrator/historias/gotest.mjs", "");
   const run = (action) => {
-    p.write("gotest.mjs", `process.stdout.write(${JSON.stringify(`> easyone@ test:go\n${events(action)}\n`)});\n`);
+    p.write("gotest.mjs", `process.stdout.write(${JSON.stringify(`> app@ test:go\n${events(action)}\n`)});\n`);
     return p.stories("--tests");
   };
   const pass = run("pass");

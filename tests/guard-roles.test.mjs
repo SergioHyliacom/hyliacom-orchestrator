@@ -11,7 +11,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const GUARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks", "guard.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 
 function project(roles = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "guard-roles-"));

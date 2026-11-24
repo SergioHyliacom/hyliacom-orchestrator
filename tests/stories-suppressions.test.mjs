@@ -45,7 +45,7 @@ function project(gates) {
   const write = (rel, text) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), text); };
   const git = (...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir, stdio: "ignore" });
   git("init", "-q", "-b", "develop");
-  // As in EASY One: the orchestrator's files are one person's, out of git.
+  // As in a shared repository: the orchestrator's files are one person's, out of git.
   appendFileSync(path.join(dir, ".git", "info", "exclude"), ".orchestrator.json\n.orchestrator/\n");
   write(".orchestrator.json", JSON.stringify({ storiesDir: ".orchestrator/historias", git: { integrationBranch: "develop" }, ...(gates ? { gates } : {}) }));
   write(".orchestrator/historias/activities.json", JSON.stringify([{ code: "NOT", name: "Tomar notas", folder: "notas" }]));

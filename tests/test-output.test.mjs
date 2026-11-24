@@ -10,7 +10,7 @@ const goFail = ({ ms = "0.01", line = 42, role = "t3fa9c01b", got = 404 } = {}) 
   `        notes_test.go:${line}: role ${role}_api: got ${got}, want 422`,
   `--- FAIL: TestNotes (${ms}s)`,
   "FAIL",
-  `FAIL\tgithub.com/hyliacom/easyone/modules/notes\t${ms}s`,
+  `FAIL\tgithub.com/acme/app/modules/notes\t${ms}s`,
 ].join("\n");
 
 test("go test: el subtest que falla, con su mensaje; la duración, la línea y el rol aleatorio no cambian el fallo", () => {
@@ -24,9 +24,9 @@ test("go test: el subtest que falla, con su mensaje; la duración, la línea y e
 
 test("go test: un paquete que no compila", () => {
   const r = readFailure([
-    "# github.com/hyliacom/easyone/modules/notes",
+    "# github.com/acme/app/modules/notes",
     "modules/notes/handler.go:12:3: undefined: ValidarNIF",
-    "FAIL\tgithub.com/hyliacom/easyone/modules/notes [build failed]",
+    "FAIL\tgithub.com/acme/app/modules/notes [build failed]",
   ].join("\n"));
   assert.ok(r.failed);
   assert.ok(r.named.some((n) => /undefined: ValidarNIF/.test(n)), r.named.join("\n"));
@@ -54,7 +54,7 @@ test("Vitest recortado con tail: el test que falla y el resumen", () => {
 test("lo que pasa no es un fallo", () => {
   for (const out of [
     " ✓ src/routes/alta.test.tsx (17 tests) 812ms\n\n Test Files  4 passed (4)\n      Tests  17 passed (17)",
-    "ok  \tgithub.com/hyliacom/easyone/modules/notes\t0.532s",
+    "ok  \tgithub.com/acme/app/modules/notes\t0.532s",
     "ℹ tests 70\nℹ pass 67\nℹ fail 0\nℹ skipped 3",
     "  12 passed (8.1s)",
     "Checked 412 files in 220ms. No fixes applied.",
@@ -75,7 +75,7 @@ test("Playwright: el test que falla, con otro número y otra duración en el seg
 });
 
 test("tsc a través de turbo, y node --test", () => {
-  const tsc = readFailure("@easyone/panel:typecheck: src/routes/alta.tsx(252,7): error TS2698: Spread types may only be created from object types.\n@easyone/panel:typecheck:  ELIFECYCLE  Command failed with exit code 2.");
+  const tsc = readFailure("@acme/web:typecheck: src/routes/alta.tsx(252,7): error TS2698: Spread types may only be created from object types.\n@acme/web:typecheck:  ELIFECYCLE  Command failed with exit code 2.");
   assert.ok(tsc.named.includes("tsc src/routes/alta.tsx TS2698"), tsc.named.join("\n"));
   const node = readFailure("✖ rechaza un correo repetido (3.1ms)\nℹ tests 4\nℹ pass 3\nℹ fail 1");
   assert.ok(node.failed);
@@ -106,9 +106,9 @@ test("qué comandos son checks", () => {
     "go test -failfast ./modules/...",
     "go -C apps/api test ./...",
     "node --test \"tests/*.test.mjs\"",
-    "pnpm --filter @easyone/panel typecheck",
+    "pnpm --filter @acme/web typecheck",
     "pnpm lint",
-    "pnpm --filter @easyone/panel exec playwright test e2e/alta.e2e.ts",
+    "pnpm --filter @acme/web exec playwright test e2e/alta.e2e.ts",
     "go run ./tools/literals check",
   ]) assert.ok(isCheckCommand(c), c);
   for (const c of [

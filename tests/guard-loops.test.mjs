@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const GUARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks", "guard.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 
 function project(config = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "guard-loops-"));
@@ -42,7 +42,7 @@ const goFail = (got, ms = "0.01") => [
   `    --- FAIL: TestNotes/[PRU-1.1]_rechaza_un_NIF_vacío (${ms}s)`,
   `        notes_test.go:42: got ${got}, want 422`,
   "FAIL",
-  `FAIL\tgithub.com/hyliacom/easyone/modules/notes\t${ms}s`,
+  `FAIL\tgithub.com/acme/app/modules/notes\t${ms}s`,
 ].join("\n");
 const TEST = "pnpm test:go -run TestNotes ./modules/notes 2>&1 | tail -20";
 
@@ -61,7 +61,7 @@ test("el mismo fallo tres veces en la ejecución para los checks del builder, co
   assert.match(context(second), /once more/, "avisa antes de parar");
   assert.equal(before(p, TEST).status, 0, "dos veces no para");
   ran(p, "pnpm test:go -v -run TestNotes ./modules/notes | grep -E 'FAIL|ok'", goFail(404, "0.61"));
-  for (const command of [TEST, "go test ./modules/notes", "pnpm --filter @easyone/panel exec vitest run"]) {
+  for (const command of [TEST, "go test ./modules/notes", "pnpm --filter @acme/web exec vitest run"]) {
     const r = before(p, command);
     assert.equal(r.status, 2, command);
     assert.match(r.stderr, /came back 3 times in this run.*TestNotes\/\[PRU-1\.1\].*report BLOCKED/s);
@@ -105,7 +105,7 @@ test("diez checks fallidos en una ejecución paran los checks; maxFailedChecks l
 
 test("un check que pasa no cuenta, ni lo que no es un check aunque imprima FAIL", () => {
   const p = project();
-  ran(p, TEST, "ok  \tgithub.com/hyliacom/easyone/modules/notes\t0.532s");
+  ran(p, TEST, "ok  \tgithub.com/acme/app/modules/notes\t0.532s");
   ran(p, "grep -rn FAIL modules/notes", "modules/notes/notes_test.go:12:// FAIL\tsi el NIF está vacío");
   assert.ok(!p.hasBreaker() || !p.breaker().failures?.a1?.checks);
 });

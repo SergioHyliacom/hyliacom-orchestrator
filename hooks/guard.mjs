@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// easyone-orchestrator guard. Claude Code hook for SessionStart, PreToolUse, PostToolUse, PostToolUseFailure and
+// hyliacom-orchestrator guard. Claude Code hook for SessionStart, PreToolUse, PostToolUse, PostToolUseFailure and
 // SubagentStop.
 // Inert unless the repository has .orchestrator.json at its root, or had it when the last agent was launched.
 // Exit 0 = allow. Exit 2 = block; stderr goes back to Claude. Exit 0 with permissionDecision "ask" on
@@ -23,14 +23,14 @@ const BUILDER = /(^|:)([a-z0-9]+-)*builder$/;
 if (["PostToolUse", "PostToolUseFailure"].includes(input.hook_event_name) && !BUILDER.test(String(input.agent_type ?? ""))) process.exit(0);
 
 function block(reason) {
-  process.stderr.write(`easyone-orchestrator: ${reason}\n`);
+  process.stderr.write(`hyliacom-orchestrator: ${reason}\n`);
   process.exit(2);
 }
 
 // A command the human must confirm. It is reported only after every other check on the line passed,
 // so a blocked command never reaches the prompt.
 let confirmReason = null;
-const confirm = (reason) => { confirmReason ??= `easyone-orchestrator: ${reason}`; };
+const confirm = (reason) => { confirmReason ??= `hyliacom-orchestrator: ${reason}`; };
 
 function toplevel(dir) {
   let d = path.resolve(dir);
@@ -73,7 +73,17 @@ try { config = JSON.parse(stripBom(snapshot ?? readFileSync(configPath, "utf8"))
 catch (e) { block(`${STATE}.json is not valid JSON (${e.message}). Fix it before continuing.`); }
 
 const git = config.git ?? {};
-const protectedBranches = git.protectedBranches ?? ["main", git.integrationBranch ?? "develop"];
+// The branch the stories merge into: git.integrationBranch, else the remote's default branch, else main.
+let integrationCache;
+function integrationBranch() {
+  if (integrationCache !== undefined) return integrationCache;
+  if (git.integrationBranch) return (integrationCache = git.integrationBranch);
+  try { integrationCache = execFileSync("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], { cwd: root, stdio: ["ignore", "pipe", "ignore"] }).toString().trim().replace(/^origin\//, ""); }
+  catch { integrationCache = "main"; }
+  return integrationCache || (integrationCache = "main");
+}
+let protectedCache;
+const protectedBranches = () => (protectedCache ??= git.protectedBranches ?? [...new Set(["main", "master", integrationBranch()])]);
 const broadAddBlocked = git.blockBroadAdd !== false;
 // Per-role settings live in .orchestrator.json → roles, keyed by the role name without the plugin prefix.
 const roleConfig = config.roles?.[agentType.split(":").pop()] ?? {};
@@ -134,16 +144,18 @@ function globRe(glob) {
   }
   return new RegExp(`^${re}${g.endsWith("/") ? "" : "$"}`);
 }
-// The orchestrator's configuration and the project's norms: no role agent changes them, on any branch.
-const CORE_PROTECTED = [`${STATE}.json`, "CONTRIBUTING.md", "CODING_STANDARDS.md", "CLAUDE.md", "docs/definicion.md",
-  `${String(config.adrDir ?? "docs/adr").replace(/\/*$/, "")}/`];
+// The orchestrator's configuration and the project's norms: no role agent changes them, on any branch. The norms are
+// .orchestrator.json → norms (files, folders ending in /, or globs); without it, the usual ones. The ADRs too.
+const NORMS = Array.isArray(config.norms) ? config.norms : ["CLAUDE.md", "AGENTS.md", "CONTRIBUTING.md", "CODING_STANDARDS.md"];
+const CORE_PROTECTED = [`${STATE}.json`, ...NORMS, `${String(config.adrDir ?? "docs/adr").replace(/\/*$/, "")}/`];
 // The configuration of the checks: the pipeline, the git hooks, the linters, the test runners. No role agent changes
 // it on a story's branch; outside the stories (feature/<slug>, fix/<slug>) it can be the work itself.
 // gates.protectedPaths replaces this list.
 const CHECK_CONFIG = Array.isArray(gates.protectedPaths) ? gates.protectedPaths : [
-  "bitbucket-pipelines.yml", "lefthook.yml", ".lefthook.yml", ".husky/",
-  "**/.golangci.*", "**/biome.json", "**/biome.jsonc", "**/eslint.config.*", "**/.eslintrc*",
-  "**/playwright.config.*", "**/vitest.config.*", "**/vitest.workspace.*",
+  ".github/workflows/", "bitbucket-pipelines.yml", ".gitlab-ci.yml", "lefthook.yml", ".lefthook.yml", ".husky/",
+  ".pre-commit-config.yaml", "**/.golangci.*", "**/biome.json", "**/biome.jsonc", "**/eslint.config.*", "**/.eslintrc*",
+  "**/playwright.config.*", "**/vitest.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/phpunit.xml*",
+  "**/pytest.ini", "**/phpstan.neon*",
 ];
 const coreRes = CORE_PROTECTED.map(globRe);
 const checkRes = CHECK_CONFIG.map(globRe);
@@ -242,10 +254,11 @@ function lastRun(file) {
   return { status, ms: Number.isNaN(began) ? null : Date.now() - began, change, brief: brief && key(path.resolve(root, brief)) };
 }
 
-// Every pull request needs another person's approval (the project's CONTRIBUTING.md), so no push or merge goes
-// through on its own: with git.allowPush false, each one asks the human. A merge is a POST to the pull request's
-// /merge endpoint, on whatever host or variable the URL is built from.
-const MERGE = /\/pullrequests\/[^/\s"']+\/merge\b/i;
+// With git.allowPush false, no push or merge goes through on its own: each one asks the human. A merge is
+// `gh pr merge` on GitHub, or a call to the pull request's /merge endpoint (GitHub's /pulls/<n>/merge, Bitbucket's
+// /pullrequests/<id>/merge), on whatever host or variable the URL is built from.
+const MERGE = /\/(pullrequests|pulls)\/[^/\s"']+\/merge\b/i;
+const isGhMerge = (t) => /^gh(\.exe)?$/i.test(path.basename(t[0] ?? "")) && t.some((x, i) => x === "pr" && t[i + 1] === "merge");
 
 // ---------- Orchestrator-owned files that git may not see
 // The stories, the lock lists and the map can live outside git (.git/info/exclude): the plugin is one person's,
@@ -286,7 +299,7 @@ if (input.hook_event_name === "SessionStart") {
   const scripts = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "scripts");
   const where = ` The story scripts are this plugin's: \`<scripts>\` in the skills is ${scripts}; run them from inside the repository.`;
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart",
-    additionalContext: `This project uses easyone-orchestrator. Load the easyone-orchestrator:orchestrate skill before any work and follow it.${where}` } }));
+    additionalContext: `This project uses hyliacom-orchestrator. Load the hyliacom-orchestrator:orchestrate skill before any work and follow it.${where}` } }));
   process.exit(0);
 }
 
@@ -314,7 +327,7 @@ if (input.hook_event_name === "PreToolUse" && ["Agent", "SendMessage"].includes(
   const runs = runsSinceCommit(b);
   if (runs.length < maxRuns) process.exit(0);
   const minutes = Math.round(runs.reduce((s, r) => s + (r.ms ?? 0), 0) / 60000);
-  const reason = `easyone-orchestrator: ${role.split(":").pop()} lleva ${runs.length} ejecuciones sin commit en ${b.branch}: `
+  const reason = `hyliacom-orchestrator: ${role.split(":").pop()} lleva ${runs.length} ejecuciones sin commit en ${b.branch}: `
     + `${runs.map((r) => `${r.change ?? "?"} → ${r.status ?? "sin informe"}`).join(" · ")}${minutes ? ` (${minutes} min)` : ""}. ¿Lanzar otra?`;
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse",
     permissionDecision: "ask", permissionDecisionReason: reason } }));
@@ -357,7 +370,7 @@ if (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostTo
   }
   writeBreaker(b);
   if (notes.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name,
-    additionalContext: `easyone-orchestrator: ${notes.join(" ")}` } }));
+    additionalContext: `hyliacom-orchestrator: ${notes.join(" ")}` } }));
   process.exit(0);
 }
 
@@ -488,13 +501,13 @@ function checkGit(args, cwd) {
     if (has(/^--no-verify$/) || has(/^-[a-z]*n/i)) block("skipping commit hooks is blocked. Fix the failing hook instead.");
     if (broadAddBlocked && (has(/^--all$/) || has(/^-[a-z]*a/i))) block("`git commit -a` stages everything. Stage the story's files by name.");
     const b = currentBranch(dirArg);
-    if (b && protectedBranches.includes(b)) block(`commits on ${b} are blocked. Create the story branch first.`);
+    if (b && protectedBranches().includes(b)) block(`commits on ${b} are blocked. Create the story branch first.`);
   }
   if (["merge", "rebase", "cherry-pick", "pull", "am", "revert"].includes(sub)) {
     const b = currentBranch(dirArg);
     // Catching up with the remote creates no commit, so `git pull --ff-only` stays allowed.
     const fastForward = ["merge", "pull"].includes(sub) && has(/^--ff-only$/);
-    if (b && protectedBranches.includes(b) && !fastForward) block(`git ${sub} on ${b} is blocked: ${b} changes only through pull requests. To bring it up to date use \`git pull --ff-only\`, or branch from origin/${b}.`);
+    if (b && protectedBranches().includes(b) && !fastForward) block(`git ${sub} on ${b} is blocked: ${b} changes only through pull requests. To bring it up to date use \`git pull --ff-only\`, or branch from origin/${b}.`);
   }
   if (sub === "add" && broadAddBlocked && rest.some((a) => /^(-A|--all|-u|--update|\.|\.\/|:\/|\*)$/.test(a))) {
     block("broad `git add` is blocked. Stage the story's files by name.");
@@ -595,9 +608,8 @@ if (input.hook_event_name === "PreToolUse" && ["Bash", "PowerShell"].includes(in
       checkGit(tokens.slice(1), here);
       continue;
     }
-    // Bitbucket has no official CLI: a merge is a POST to the pull request's /merge endpoint, on whatever
-    // host or variable the URL is built from. The id may come from a variable; then the merge is still a merge.
-    if (tokens.some((t) => MERGE.test(t))) {
+    // A merge through gh, or through the API: the id may come from a variable; then the merge is still a merge.
+    if (isGhMerge(tokens) || tokens.some((t) => MERGE.test(t))) {
       if (inSubagent) block("role agents never merge. The product owner merges, or asks the orchestrator to.");
       if (git.allowPush === false) confirm("git.allowPush is false in this project, so every merge needs the product owner's confirmation.");
     }
@@ -661,7 +673,7 @@ if (input.hook_event_name === "SubagentStop") {
   // A commit made through an interpreter leaves the tree equal to HEAD. Each lock list holds the commit it was
   // locked at (`# commit <sha>`); a list git tracks also has the last commit that touched it. The locked files
   // must still match that commit. Only this branch's own commits count: a change from the integration branch is not the agent's.
-  const integration = `refs/remotes/origin/${git.integrationBranch ?? "develop"}`;
+  const integration = `refs/remotes/origin/${integrationBranch()}`;
   const own = run(["rev-parse", "--verify", "--quiet", integration]) ? ["--not", integration] : [];
   const committed = [];
   let lockedAt = "";

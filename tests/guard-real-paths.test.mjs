@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const GUARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks", "guard.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 // Creating a link on Windows needs privileges most machines lack.
 const skip = process.platform === "win32" ? "los enlaces simbólicos piden permisos en Windows" : false;
 

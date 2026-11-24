@@ -17,9 +17,9 @@ A builder that reports BLOCKED goes to your human. The guard counts the builder 
 
 ## Roles and names
 
-`builder` is the only role that writes code; `reviewer`, `researcher` and `auditor` are read-only. No agent commits: you do, once you have checked its evidence, and the guard blocks a subagent's `git commit`, `merge`, `pull`, `rebase`, `cherry-pick`, `am` and `revert`. A project role writes only when `.orchestrator.json` → `roles.<role>.paths` gives it paths, and only in them; every other subagent, a general-purpose one too, is read-only for the guard. Call them through the Agent tool as `easyone-orchestrator:<role>`; your own roles in `.claude/agents/` by their name. Before creating a role, read `references/roles.md`.
+`builder` is the only role that writes code; `reviewer`, `researcher` and `auditor` are read-only. No agent commits: you do, once you have checked its evidence, and the guard blocks a subagent's `git commit`, `merge`, `pull`, `rebase`, `cherry-pick`, `am` and `revert`. A project role writes only when `.orchestrator.json` → `roles.<role>.paths` gives it paths, and only in them; every other subagent, a general-purpose one too, is read-only for the guard. Call them through the Agent tool as `hyliacom-orchestrator:<role>`; your own roles in `.claude/agents/` by their name. Before creating a role, read `references/roles.md`.
 
-Name every instance `<role>-<scope>`, the scope being the story ID or a short topic (`reviewer-EO-123`, `researcher-redsys`), and use the name in the task description.
+Name every instance `<role>-<scope>`, the scope being the story ID or a short topic (`reviewer-ALT-001`, `researcher-payments`), and use the name in the task description.
 
 ## Brief
 
@@ -31,7 +31,7 @@ Story: <absolute path of the story file>   (a task: "none", and the branch)
 Change: <criterion ID> | refactor <criterion ID> | task <slug>: <what changes>   (reviewers: "Judge: <what>")
 Request: <your human's words that ask for this work, verbatim — a task, a refactor, a change they asked for at their ok; omit it when the story's criterion is the whole request>
 Commit: <the exact commit to judge — reviewers only; a re-review also names the commit already reviewed>
-Read first: <the norms that apply, by document and section (CODING_STANDARDS.md, CONTRIBUTING.md, an ADR), the module's README and `modules/example` as the pattern, and the code the work touches>
+Read first: <the norms that apply, by document and section (`.orchestrator.json` → `norms`, an ADR), the module's README, the project's template or example module as the pattern when it has one, and the code the work touches>
 Constraints: <invariants, do-not-touch>
 You may edit: <roles.<role>.paths, or what the work touches>   (read-only roles: "nothing")
 Done when: <the check that proves it, with the exact command>

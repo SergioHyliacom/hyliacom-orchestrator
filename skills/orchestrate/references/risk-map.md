@@ -4,7 +4,7 @@ A story's risk tags tell the reviewer where to look first, and a delivery audit 
 
 ## What risk means
 
-A change is risky when a mistake in it would be hard to detect, hard to undo, or reach beyond the change. In EASY One the project already names most of them: what `CLAUDE.md` lists under «Para y propón un ADR antes de programar» and the checklist of `CODING_STANDARDS.md` (ARCH-1 to ARCH-8). The default categories, which you keep, rename, drop or extend with your human:
+A change is risky when a mistake in it would be hard to detect, hard to undo, or reach beyond the change. The project's norms often name most of them already: what they say needs an ADR, and what they mark as critical. The default categories, which you keep, rename, drop or extend with your human:
 
 | Category | What it covers | Typical code |
 |---|---|---|
@@ -13,7 +13,7 @@ A change is risky when a mistake in it would be hard to detect, hard to undo, or
 | Account isolation | which customer owns each piece of data | resolving the account of a request, per-account connections, queries that filter by account |
 | Personal data | what the law protects | personal fields, exports, logs and error messages that could carry them |
 | Contracts others use | what someone else already consumes | the public API (`/v1`), integrations, webhooks, exported formats |
-| Money | payments and legal duties | payments, invoices, VeriFactu, time records |
+| Money | payments and legal duties | payments, invoices, tax records, what the law requires to keep |
 | Production | how it runs and ships | deployment, CI, infrastructure, dependencies |
 
 A category with no code yet keeps its tag and has no path: stories carry it by their tags and the builders' `Risk:` line until that code exists.
@@ -22,7 +22,7 @@ A category with no code yet keeps its tag and has no path: stories carry it by t
 
 When a machine is set up, or the map is redrawn, your session:
 
-1. **Briefs a `researcher`** (read-only) with this file's path, `.orchestrator.json`, the project's norms (`CODING_STANDARDS.md`, `CLAUDE.md`, the ADRs), `modules/README.md` and the code graph when it works on this machine. It looks for each category in the code: package names and what they import (authentication, cryptography, a payment SDK), migration folders, what the ADRs and the norms name as critical, the code most others depend on (the graph's hub nodes), and the path a request takes to reach the data.
+1. **Briefs a `researcher`** (read-only) with this file's path, `.orchestrator.json`, the project's norms (`.orchestrator.json` → `norms`, the ADRs), the README that maps its modules when there is one, and the code graph when it works on this machine. It looks for each category in the code: package names and what they import (authentication, cryptography, a payment SDK), migration folders, what the ADRs and the norms name as critical, the code most others depend on (the graph's hub nodes), and the path a request takes to reach the data.
 2. **Reads its proposal:** one line per entry, `tag → path or glob → why`, with `file:line` evidence; and the categories it found no code for. One entry per responsibility: the file that carries it, not a whole folder that also holds unrelated code. A path ending in `/` is a folder; `*` stays inside one folder, `**` crosses them.
 3. **Shows it to its human,** each line with its reason, and the trade-off: a broad map sends most stories to the deepest review, a narrow one lets risk through. They choose the categories and approve the entries.
 4. **Writes** `riskTags` and `riskPaths` into `.orchestrator.json`, and the table with the reasons into `.orchestrator/risk-map.md` (the JSON holds no comments, and the reasons must survive).

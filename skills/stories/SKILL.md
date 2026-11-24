@@ -1,6 +1,6 @@
 ---
 name: stories
-description: Write, split, review and maintain user stories in a project that uses easyone-orchestrator. Covers the story file format, acceptance criteria as rules plus key examples, verification markers, splitting patterns, the ADRs a story waits for, and the anti-patterns the validator flags. Use when creating or editing a story, turning a request into stories, splitting a large story, checking if a story is ready, or recording that a criterion fails.
+description: Write, split, review and maintain user stories in a project that uses hyliacom-orchestrator. Covers the story file format, acceptance criteria as rules plus key examples, verification markers, splitting patterns, the ADRs a story waits for, and the anti-patterns the validator flags. Use when creating or editing a story, turning a request into stories, splitting a large story, checking if a story is ready, or recording that a criterion fails.
 ---
 
 # Stories
@@ -22,7 +22,7 @@ Stories have no priority field. The release sets the order. The first release in
 ## The story file
 
 - File: `stories/<activity folder>/<ID>-<short-title>.md`. Lowercase, no accents, hyphens.
-- ID: a prefix and a number, e.g. `EO-123` (`stories.config.json` → `idPrefix` pins the prefix). It comes with the story from gg-ez, where the story is written (`orchestrate` skill, §5); until that link exists, the human gives it. The same ID, in lowercase, starts the story's branch (`feature/eo-123-<slug>`) and tags the tests. Criterion ID: `<ID>.N`, e.g. `EO-123.1`. IDs are permanent. Never reuse or renumber them, even after discarding.
+- ID: a prefix and a number, e.g. `ALT-001`. The prefix names an area of the product and the stories of one area share it (`stories.config.json` → `idPrefix` pins a single prefix for the project); the human gives the ID, or you propose the next free one. The same ID, in lowercase, starts the story's branch (`feature/alt-001-<slug>`) and tags the tests. Criterion ID: `<ID>.N`, e.g. `ALT-001.1`. IDs are permanent. Never reuse or renumber them, even after discarding.
 - Activity: the `activity` field names it exactly as in `activities.json`. It decides the folder.
 - Tags: `tags` holds the risk tags (`.orchestrator.json` → `riskTags`) of the areas the story touches. Whoever writes the story sets them; one is added at the kickoff when the story touches an area it does not name, and later when the machine asks for it: `stories.mjs --check` and `--pr` fail when the story branch changes a path that `.orchestrator.json` → `riskPaths` gives a tag the story lacks. A tag is never removed to make that check pass. A risk tag adds the reviewer at story close.
 - Title: starts with a verb in the infinitive or imperative and names what the person achieves.
@@ -36,14 +36,14 @@ Sections, in order (the project uses its translated headings):
 3. **Out of scope**: what this story does not do, with the story ID that does it if one exists. Agents add unrequested features when nothing excludes them.
 4. **Verification**: the exact command that checks this story.
 5. **Open questions**: must be empty before the story is built. The kickoff writes here what it cannot build, one line per criterion ID, until they are answered and the section is empty again.
-6. **Notes**: optional. Files to follow as patterns, context for the builder. Never restate the Definition of Done or the project's norms (`CONTRIBUTING.md`, `CODING_STANDARDS.md`, the ADRs).
+6. **Notes**: optional. Files to follow as patterns, context for the builder. Never restate the Definition of Done or the project's norms (`.orchestrator.json` → `norms`, the ADRs).
 
 ## Acceptance criteria
 
 Each criterion is a **rule**, optionally followed by **key examples**.
 
 ```
-- **EO-123.1** When the user saves a text, the system shows the new text in the preview. [unbuilt]
+- **ALT-001.1** When the user saves a text, the system shows the new text in the preview. [unbuilt]
   - Given the heading says "Hello", when the user changes it to "Hi" and saves, then the preview shows "Hi".
   - Given the user clears the text, when they save, then the system keeps the previous text and shows an error.
 ```
@@ -67,10 +67,11 @@ Each criterion's rule line ends with exactly one marker (the project uses its tr
 | `[unbuilt]` | The behaviour does not exist yet. |
 | `[failing: reason]` | The behaviour exists and does not hold. |
 
-In this project a test is tagged by starting its name with the criterion ID, and the marker is `[test]` with no reference:
+A test is tagged by starting its name with the criterion ID, and the marker is `[test]` with no reference:
 
-- Go: a subtest, `t.Run("[EO-123.1] rejects an invalid NIF", ...)`.
-- Vitest and the end-to-end runner: the title, `it("[EO-123.1] shows 'NIF no válido' under the field")`.
+- Go: a subtest, `t.Run("[ALT-001.1] rejects an invalid tax ID", ...)`.
+- Vitest, Jest, `node --test` and the end-to-end runners: the title, `it("[ALT-001.1] shows 'Invalid tax ID' under the field")`.
+- JUnit reports (PHPUnit, pytest, Playwright, gotestsum…): the test's name, `[ALT-001.1] …`.
 
 A criterion can have several tests with the same ID, in different runners (a Go subtest and an end-to-end test). It works only when every test with its ID passes.
 
@@ -87,14 +88,14 @@ A bug reopens the story it breaks (`orchestrate` skill, `references/development.
 
 ## Decisions: the ADRs
 
-A choice of architecture, and anything in the list of `CONTRIBUTING.md` «Cuándo hace falta un ADR», is an ADR of the project: `docs/adr/NNNN-<title>.md`, from its `README.md`, accepted by the technical lead. The decisions D1-D30 are in section 14 of `docs/definicion.md`. There are no decision files of the plugin's own: never write a `DEC-NNN`.
+A choice of architecture, and anything the project's norms say needs an ADR, is an ADR of the project: `<adrDir>/NNNN-<title>.md` (`.orchestrator.json` → `adrDir`, default `docs/adr`), in the format the project's ADRs already use, accepted by whoever the norms name, or by the human. There are no decision files of the plugin's own: never write a `DEC-NNN`.
 
-A story that waits for an ADR names it in `blocked_by`: `blocked_by: [ADR-0023]`. `stories.mjs` reads its `Estado` line: while it says `propuesta`, the story is blocked and cannot be built; once `aceptada`, it is not. A product choice (a flow, a screen, a text) needs no ADR: it is the story's, and gg-ez's.
+A story that waits for an ADR names it in `blocked_by`: `blocked_by: [ADR-0023]`. `stories.mjs` reads its status line (`- **Status:** …`, or `Estado` in Spanish): while it says `proposed` (`propuesta`), the story is blocked and cannot be built; once it says anything else, it is not. A product choice (a flow, a screen, a text) needs no ADR: it is the story's.
 
 
 ## Discarding
 
-Never delete a story. Set `discarded: true` and add a **Discard reason** section with the date and the reason. The discard arrives from gg-ez (`orchestrate` skill, §5); until that link exists, the human says so and the discard goes in its own pull request.
+Never delete a story. Set `discarded: true` and add a **Discard reason** section with the date and the reason. Only the human discards a story.
 
 ## Splitting a story
 
@@ -114,17 +115,6 @@ Then try these patterns in order. Prefer the split that lets you drop or defer a
 
 Never split by layer ("API for…", "database for…", "front end of…"). A layer delivers nothing a person notices: the layers a story crosses are parts of the same story, not stories of their own.
 
-## Porting a story from the design repo
-
-When this machine has a design repo configured (`design-source.mjs --init`), a screen's story can start there (`orchestrate` skill, §5). Run `design-source.mjs --show <ID>` and rewrite it as a story of this project:
-
-- Keep what the person achieves and the states (loading, empty, error, success). Take the ID this project gives it; note the design repo's ID in Notes so the two can be matched.
-- Drop what belongs to its prototype: demo data, the control bar, `[test: src/data/…]` markers. Every criterion starts `[unbuilt]`.
-- Name in Notes the lock (`lock/<ID>-<screen>`) and the captures the builder must match, and which `@easyone/ui` components are likely to carry it. Design values (sizes, colours, copy) are read from the lock by the builder, never written into the story.
-- Name in Notes the API operations the story needs, and whether each is already in `packages/api-client/openapi.json`. One that is not is still to be agreed (`orchestrate` skill, §5): it goes to Open questions.
-- What contradicts what binds (`CLAUDE.md`, «Qué obliga y qué no») goes to Open questions. A flow, a step or a button that differs from the definition's description of the product does not: design and product decide those.
-- Close with `design-source.mjs --record <ID>`.
-
 ## Turning a request into stories
 
 1. Find the activity. If none fits, propose a new one to the human; activities are product calls.
@@ -134,7 +124,7 @@ When this machine has a design repo configured (`design-source.mjs --init`), a s
 5. Fill out-of-scope and verification.
 6. Run `node <scripts>/stories.mjs --ready <ID>`.
 
-A story is approved where it is written, in gg-ez. The kickoff reads it again before anything is built (`orchestrate` skill, `references/development.md`).
+The human approves the story before its kickoff; the kickoff reads it again before anything is built (`orchestrate` skill, `references/development.md`).
 
 A story is a capability, not a screen. One screen can hold several stories (a list, its filter, its export); one story can cross several screens (a sign-up in three steps). Split by what a person achieves, with the patterns in *Splitting a story*.
 
@@ -142,7 +132,7 @@ A story is a capability, not a screen. One screen can hold several stories (a li
 
 `stories.mjs` checks structure on every run and readiness with `--ready`:
 
-- Errors: an ID that is not a prefix and a number, repeated IDs, file in the wrong folder, activity name that does not match `activities.json`, unknown release or persona, missing marker, unknown marker, missing test, an ADR in `blocked_by` with no file in `docs/adr/`, unknown `depends_on`, discarded without reason.
+- Errors: an ID that is not a prefix and a number, repeated IDs, file in the wrong folder, activity name that does not match `activities.json`, unknown release or persona, missing marker, unknown marker, missing test, an ADR in `blocked_by` with no file in the ADR folder, unknown `depends_on`, discarded without reason.
 - Not ready: empty out-of-scope, empty verification, open questions, a proposed ADR in `blocked_by`, hedged words in a rule.
 - Warnings: story text not in the persona/want/benefit shape, vague words ("fast", "easy", "intuitive"…), more than 6 criteria, dependency not yet working.
 

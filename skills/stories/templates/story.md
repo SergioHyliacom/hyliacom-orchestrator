@@ -1,5 +1,5 @@
 ---
-id: EO-000
+id: ABC-000
 title: Verb and what the person achieves
 activity: Exact activity name from activities.json
 persona: A persona from stories.config.json
@@ -16,7 +16,7 @@ I want [capability],
 so that [benefit].
 
 ## Acceptance criteria
-- **EO-000.1** When [situation or action], the system [observable behaviour]. [unbuilt]
+- **ABC-000.1** When [situation or action], the system [observable behaviour]. [unbuilt]
   - Given [state], when [action], then [checkable result].
 
 ## Out of scope

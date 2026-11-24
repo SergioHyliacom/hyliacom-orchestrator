@@ -1,147 +1,114 @@
-# easyone-orchestrator
+# hyliacom-orchestrator
 
-Plugin de Claude Code con el que Sergio desarrolla EASY One. Es una adaptación del [Orchestrator](https://github.com/sydneyhylia/Orchestrator) de Sydney y Claude.
+Plugin de Claude Code para desarrollar cualquier proyecto historia a historia, con una sola persona al mando. Sale de `easyone-orchestrator`, la adaptación de Hyliacom para EASY One, que a su vez parte del [Orchestrator](https://github.com/sydneydesign/Orchestrator) de Sydney y Claude. Esta versión no lleva nada de EASY One: lo que obliga en cada proyecto lo dicen sus propias normas.
 
-- **Lo usa una sola persona y es solo suyo.** Tu sesión de Claude (Opus) orquesta tu trabajo. Sus ficheros viven en tu equipo, excluidos de git, y nada del método entra en el repositorio de EASY One. Al empezar, y cada vez que le preguntas «¿qué me toca?», como te salga, te dice en qué punto estás y qué sigue, y te pregunta sí o no.
-- **Manda el repositorio.** `CONTRIBUTING.md`, `CODING_STANDARDS.md`, las «Reglas que no se negocian» y «Qué obliga y qué no» de `CLAUDE.md`, los ADR aceptados y la sección 14 de la definición obligan siempre. El plugin los aplica y no relaja ninguno: si choca con ellos, ganan ellos.
-- **Las historias se escriben en gg-ez**, el tablero del equipo, con sus criterios de aceptación. Tú las construyes en EASY One.
+- **Lo usa una sola persona y es solo suyo.** Tu sesión de Claude orquesta tu trabajo. Sus ficheros viven en tu equipo, excluidos de git, y nada del método entra en el repositorio del proyecto. Al empezar, y cada vez que le preguntas «¿qué me toca?», como te salga, te dice en qué punto estás y qué sigue, y te pregunta sí o no.
+- **Mandan las normas del proyecto.** Los documentos que pongas en `norms` (`CLAUDE.md`, `CONTRIBUTING.md`, sus estándares de código…) y sus ADR aceptados obligan siempre. El plugin los aplica y no relaja ninguno: si choca con ellos, ganan ellos. Donde el proyecto no dice nada, el plugin trae valores por defecto razonables (Conventional Commits, `feature/<id>-<slug>`, Squash).
+- **Las historias se escriben contigo** (skill `stories`), con sus criterios de aceptación, y viven en tu equipo.
 - **Un criterio cada vez.** El agente `builder` escribe el test, lo ve fallar, lo hace pasar y se para; la sesión comprueba las pruebas y hace el commit. Tú das el ok en el primer criterio y en la construcción terminada.
-- **Cada PR lleva revisión con Claude** (el agente `reviewer`, que repasa también el checklist de `CODING_STANDARDS.md`) y la aprobación de otra persona. Se fusiona con Squash.
-- **Una guardia** (un hook) impide lo peligroso: ningún agente hace commit, cada uno escribe solo donde le toca, y nadie toca los tests bloqueados ni las historias.
-- **Un builder que da vueltas se para pronto.** La guardia lee la salida de cada test y cada check que lanza, también cuando la recorta con `| tail` o `| grep` y el código de salida se pierde. El mismo fallo tres veces en una ejecución, aunque haya otros entre medias, o diez checks fallidos, y el builder deja de probar y te dice qué intentó. Un check que se cuelga al parar se corta a los cinco minutos. Tras tres ejecuciones sin commit, te pregunta antes de lanzar otra.
-- **Lo que juzga un cambio queda fuera de su alcance.** Ningún agente toca `.orchestrator.json` ni las normas del proyecto, ni, en la rama de una historia, la configuración de los checks; y una rama no apaga un check en su código (`eslint-disable`, `//nolint`, un test saltado) sin tu ok. Cada compuerta empieza en modo `observe`: apunta lo que bloquearía y no bloquea nada hasta que la pases a `enforce`.
-- **Cada cosa tiene un solo sitio.** Está en la skill `orchestrate`, `references/where-things-live.md`.
-- **Al cerrar cada entrega, una auditoría por muestreo** contra las normas del proyecto. Lo que puede repetirse se propone como comprobación de la máquina o como línea de `CODING_STANDARDS.md`, siempre por PR.
+- **Cada PR lleva revisión** del agente `reviewer` antes de abrirse, más las aprobaciones de otras personas que pida el proyecto (`git.requiredApprovals`, 0 por defecto). Se fusiona con la estrategia que digas (Squash por defecto) y siempre con tu ok.
+- **GitHub y Bitbucket.** Cada proyecto dice cuál usa (`git.host`): en GitHub con `gh`; en Bitbucket, por su API.
+- **Una guardia** (un hook) impide lo peligroso: ningún agente hace commit, push ni merge; cada uno escribe solo donde le toca; nadie toca los tests bloqueados, las historias ni las normas del proyecto; y nada se salta los hooks de git ni fuerza un push.
+- **Un builder que da vueltas se para pronto.** La guardia lee la salida de cada test y cada check que lanza, también cuando la recorta con `| tail` o `| grep`. El mismo fallo tres veces en una ejecución, o diez checks fallidos, y el builder deja de probar y te dice qué intentó. Tras tres ejecuciones sin commit, te pregunta antes de lanzar otra.
+- **Lo que juzga un cambio queda fuera de su alcance.** Ningún agente toca `.orchestrator.json` ni las normas, ni, en la rama de una historia, la configuración de los checks; y una rama no apaga un check en su código (`eslint-disable`, `//nolint`, un test saltado) sin tu ok. Cada compuerta empieza en modo `observe`: apunta lo que bloquearía y no bloquea nada hasta que la pases a `enforce`.
+- **Al cerrar cada entrega, una auditoría por muestreo**, si la pides, contra las normas del proyecto. Lo que puede repetirse se propone como comprobación de la máquina o como línea de una norma, siempre por PR.
 
-## Cómo encaja en el repositorio de EASY One
+## Instalar el plugin
 
-| Norma del repositorio | Cómo la cumple el plugin |
-|---|---|
-| Ramas `feature/`, `fix/`, `hotfix/`, en inglés y kebab-case; no hay `chore/` | La rama de una historia es `feature/<id>-<slug>` (`feature/alt-001-email-signup`); si se reabre por un bug, `fix/<id>-<slug>`. El trabajo fuera de las historias va en `feature/<slug>` o `fix/<slug>` |
-| Commits `tipo(ámbito): descripción`, que lefthook comprueba | Un commit por criterio, con el ID al empezar la descripción: `feat(identity): ALT-001.1 rechazar un correo ya registrado` |
-| Claude no hace commits ni push salvo que se le pida, y `.claude/settings.json` los pregunta | Pedir que se construya una historia y dar el ok al primer criterio es pedir sus commits. El aviso de cada `git commit` y `git push` es tu confirmación, y la sesión no vuelve a preguntar |
-| PR con el título en el formato de los commits y la lista de `CONTRIBUTING.md` al final | La sesión lo abre así por la API de Bitbucket, con otra persona como revisora |
-| `feature/` y `fix/` → `develop` con Squash, con el título del PR como mensaje | La sesión fusiona así, con tu ok, cuando otra persona aprueba, no hay tareas abiertas y el pipeline está en verde. No hay PR que se fusione solo |
-| Revisión con Claude en todos los PR | El `reviewer`, en cada PR, no solo en los de riesgo |
-| Normas en `CONTRIBUTING.md` y `CODING_STANDARDS.md` | Los agentes citan el documento y el apartado, o el ID del checklist. Una norma nueva se propone como PR a esos documentos |
-| Decisiones en ADR y en la definición | Una historia que espera una decisión la cita en `blocked_by: [ADR-0023]`, y no se construye mientras el ADR esté propuesto. Si toca algo de la lista «Para y propón un ADR», se para antes de programar |
-| Comprobaciones de «Comprobaciones» y README del módulo al día | Al cerrar la construcción, con `pnpm test:go` para los tests con BD. Un test saltado no cuenta como verde |
-| Las vulnerabilidades no se detallan en un PR | Los hallazgos de seguridad se te cuentan en la sesión y no van al PR |
+**Solo para ti y solo en el proyecto donde lo uses.** Abre una terminal en la carpeta del proyecto y ejecuta:
 
-## Pendiente
+```
+claude plugin marketplace add SergioHyliacom/hyliacom-orchestrator
+claude plugin install hyliacom-orchestrator@hyliacom-orchestrator --scope local
+```
 
-**El enlace con gg-ez.** Hoy el servidor MCP de gg-ez solo devuelve el identificador, el título y la columna de cada tarea, y no puede escribir (guarda G-3). Para que el orquestador trabaje desde gg-ez faltan tres piezas, por este orden:
+`--scope local` lo apunta en `.claude/settings.local.json`, que no se sube: nadie más lo ve ni lo carga. Cada clon lo instala por su cuenta.
 
-1. **Acordar cómo es una historia en gg-ez**, con el orquestador de Sydney, que es quien las sube.
-2. **En gg-ez:** que el MCP devuelva una historia con sus criterios, y que pueda marcar el estado de la tarjeta y cada criterio cumplido. Lo segundo lleva su decisión sobre la guarda G-3.
-3. **En el orquestador:** traer la historia a un fichero de `<storiesDir>/stories/` (generado, sin editarlo a mano; cada criterio conserva su marca si su texto no cambia) y devolver el progreso.
+Para probarlo desde esta carpeta, sin instalarlo: `claude --plugin-dir <ruta de esta carpeta>`.
 
-**Las operaciones de la API que hará backend.** El front llama a la API solo con el cliente generado, y la OpenAPI se genera desde Go. Cuando una historia necesita una operación que aún no existe y la va a hacer backend, falta acordar contigo y con el equipo cómo se prepara el front: quién la declara en Go y cómo se prueba mientras tanto.
+Claude Code carga los plugins al arrancar. Después de instalar, abre una sesión nueva: hay que reiniciar el CLI, no basta con `/clear`.
 
-Hasta entonces, las sesiones lo dicen en vez de improvisar (skill `orchestrate`, §5).
+**No lo actives en un proyecto donde ya esté `easyone-orchestrator`:** los dos leen `.orchestrator.json` y su guardia actuaría dos veces.
+
+## Preparar un proyecto
+
+En un proyecto sin `.orchestrator.json` el plugin no hace nada: la guardia está inactiva y la sesión no carga el método. Para empezar, pídeselo a Claude («prepara el orquestador en este proyecto», o `/hyliacom-orchestrator:orchestrate`) y lo hace contigo, paso a paso (skill `orchestrate`, `references/setup.md`):
+
+1. Excluye sus ficheros en `.git/info/exclude`, nunca en el `.gitignore` compartido:
+
+   ```
+   /.orchestrator/
+   /.orchestrator.json
+   ```
+
+2. Lee el proyecto: sus normas, sus comprobaciones (scripts, CI, hooks de git), sus tests y su git (GitHub o Bitbucket, rama por defecto, idioma y formato de los commits).
+3. Te propone `.orchestrator.json`. Lo principal:
+
+   | Clave | Qué es |
+   |---|---|
+   | `storiesDir` | La carpeta de las historias, dentro de `.orchestrator/` |
+   | `language` | El idioma de lo que se escribe en el repositorio: commits, PR, README |
+   | `norms` | Los documentos que obligan; ningún agente los toca. Sin ella: `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` y `CODING_STANDARDS.md` |
+   | `adrDir` | Los ADR del proyecto (`docs/adr` por defecto). Una historia puede esperar a uno con `blocked_by: [ADR-0023]` |
+   | `git` | `host` (`github` o `bitbucket`), `integrationBranch` (por defecto la rama por defecto del remoto), `productionBranch`, `mergeStrategy` (`squash`), `releaseStrategy`, `requiredApprovals` (0), `allowPush` (`false` para que cada push y cada fusión te pregunten) |
+   | `verify` | `all`, las comprobaciones completas al cerrar cada construcción, y los límites del builder: `maxBuilderRuns` (3), `maxSameFailure` (3), `maxFailedChecks` (10), `checkTimeout` (300 s) |
+   | `roles` | Las comprobaciones rápidas del builder (`roles.builder.onStop`) y, si hace falta, sus rutas (`paths`). El desarrollo se abre cuando existe |
+   | `contextDocs` | Los textos que `stories.mjs --check` vigila para que no nombren rutas ni scripts que ya no existen |
+   | `riskTags`, `riskPaths` | El mapa de riesgo (`references/risk-map.md`) |
+   | `gates` | Las compuertas, en `observe` por defecto (`references/gates.md`) |
+
+4. Crea la carpeta de historias, con `activities.json` y `stories.config.json`. Este último lleva las personas, las entregas y una fuente de tests por cada runner: `jest-json` (Vitest, Jest), `junit` (PHPUnit, pytest, Playwright…) o `go-json` (`go test -json`).
+5. Dibuja contigo el mapa de riesgo, comprueba tu acceso a GitHub o Bitbucket y escribe la primera historia, que sirve de piloto.
+
+## GitHub y Bitbucket
+
+- **GitHub:** necesita `gh` con sesión iniciada (`gh auth login`). Los PR se abren con `gh pr create` y se fusionan con `gh pr merge`.
+- **Bitbucket:** no tiene CLI oficial. Necesita un token de API con permisos de PR en tu entorno: `BITBUCKET_USER`, que es el email de tu cuenta Atlassian, y `BITBUCKET_TOKEN`.
+
+El token nunca se escribe en el chat ni en un fichero. Sin acceso sigues trabajando igual: los PR se abren y fusionan desde la web, y Claude te da el título, el cuerpo y la estrategia.
 
 ## Contenido
 
 | Ruta | Qué es |
 |---|---|
-| `agents/builder.md` | El único agente que escribe código: un criterio o una tarea por encargo, en todas las capas que toque (Go y PostgreSQL, React, Hyliable) |
-| `agents/reviewer.md` | La revisión con Claude de cada PR: tests, criterios, código y el checklist de `CODING_STANDARDS.md` |
+| `agents/builder.md` | El único agente que escribe código: un criterio o una tarea por encargo, en todas las capas que toque |
+| `agents/reviewer.md` | La revisión de cada PR: tests, criterios, código y el checklist del proyecto si tiene |
 | `agents/auditor.md` | Auditoría por muestreo al cerrar cada entrega, contra las normas del proyecto |
 | `agents/researcher.md` | Investigación de solo lectura |
-| `skills/orchestrate/` | El día a día de la sesión. Un núcleo corto (`SKILL.md`) y referencias que se leen solo cuando el trabajo las necesita (`references/`): desarrollo, encargos a los agentes, trabajo fuera de las historias, auditoría, mapa de riesgo, compuertas, dónde vive cada cosa, git y Bitbucket, y acceso |
+| `skills/orchestrate/` | El día a día de la sesión. Un núcleo corto (`SKILL.md`) y referencias que se leen solo cuando el trabajo las necesita (`references/`): preparar un proyecto, desarrollo, encargos a los agentes, trabajo fuera de las historias, auditoría, mapa de riesgo, compuertas, dónde vive cada cosa, git, y acceso a GitHub y Bitbucket |
 | `skills/que-hago/` | En qué punto estás y qué sigue: rama, historias, PR y bitácora. Claude la carga al empezar y cuando preguntas qué te toca |
 | `skills/stories/` | Cómo es una historia, sus criterios y sus marcas |
-| `skills/diseno/` | Monta y refresca en cada equipo el enlace con el repo de diseño de Sydney |
-| `scripts/` | El validador de historias (`stories.mjs`) y la lectura del repo de diseño (`design-source.mjs`). El proyecto no guarda copia: la sesión ejecuta los del plugin, y nunca van al pipeline |
+| `scripts/stories.mjs` | El validador de historias y el generador del mapa. El proyecto no guarda copia: la sesión ejecuta el del plugin, y nunca va al pipeline |
 | `hooks/guard.mjs` | La guardia |
 | `hooks/test-output.mjs` | La lectura de la salida de los tests y los checks (Go, Vitest, Playwright, `node --test`, tsc, Biome): si fallaron y qué falló |
 | `tests/` | Los tests de la guardia y de los scripts: `node --test "tests/*.test.mjs"` |
 
-## Instalar el plugin
-
-**Solo para ti y solo en el proyecto de EASY One.** Abre una terminal en la carpeta del proyecto y ejecuta:
-
-```
-claude plugin marketplace add SergioHyliacom/Orquestador
-claude plugin install easyone-orchestrator@hyliacom --scope local
-```
-
-`--scope local` lo apunta en `.claude/settings.local.json`, que no se sube: el resto del equipo no lo ve ni lo carga. Cada clon del proyecto lo instala por su cuenta.
-
-Para probar el plugin desde esta carpeta, sin instalarlo: `claude --plugin-dir <ruta de esta carpeta>`.
-
-Claude Code carga los plugins al arrancar. Después de instalar, abre una sesión nueva: hay que reiniciar el CLI, no basta con `/clear`.
-
-**Los hooks de tus otros plugins también se ejecutan en el proyecto**, aunque no uses sus skills. Si uno estorba aquí, desactívalo solo en este proyecto: `claude plugin disable <nombre> --scope local`.
-
-## La primera vez
-
-La sesión comprueba que puede abrir tus PR en Bitbucket. Si no, te guía para crear un token de API con permisos de PR y guardarlo en tu entorno: `BITBUCKET_USER`, que es el email de tu cuenta Atlassian, no tu usuario de Bitbucket, y `BITBUCKET_TOKEN`. El token nunca se escribe en el chat ni en un fichero. Sin él sigues trabajando igual: los PR se abren desde la web.
-
-Lo que se escribe en el repositorio (código, commits, PR) va en español, salvo los identificadores, que van en inglés (`CODING_STANDARDS.md`).
-
-## Preparar tu equipo
-
-Todo esto es tuyo y vive en tu clon de EASY One, sin entrar en git. Se excluye con `.git/info/exclude`, nunca con el `.gitignore` compartido:
-
-```
-/.orchestrator/
-/.orchestrator.json
-```
-
-- `.orchestrator.json`: `storiesDir` (por ejemplo `.orchestrator/historias`), `git` (con `allowPush: false`, para que cada push y cada fusión te pregunten), `verify` (las comprobaciones de «Comprobaciones» de `CONTRIBUTING.md`, y los límites del builder: `maxBuilderRuns`, 3 ejecuciones sin commit; `maxSameFailure`, el mismo fallo 3 veces; `maxFailedChecks`, 10 checks fallidos por ejecución; `checkTimeout`, 300 segundos por check al parar; 0 apaga los tres primeros), `roles` (con las comprobaciones rápidas del builder en `roles.builder.onStop`), `contextDocs` y el mapa de riesgo (`riskTags`, `riskPaths`; skill `orchestrate`, `references/risk-map.md`). El desarrollo se abre cuando tiene `roles`. Las compuertas (`gates`; skill `orchestrate`, `references/gates.md`) funcionan sin configurarlas, en modo `observe`; `gates.protectedPaths` cambia qué configuración de checks se protege (por defecto, el pipeline, Lefthook, Husky, golangci-lint, Biome, ESLint, Playwright y Vitest).
-- `<storiesDir>/stories.config.json`: las entregas, los perfiles y las fuentes de tests. Los de Go se leen de `go test -json`, sin dependencias nuevas: `{ "command": "pnpm -s test:go -json ./... > {report}", "format": "go-json" }`. Los de Vitest, en `jest-json`.
-
 ## Requisitos
 
 - Claude Code con soporte de plugins.
-- Node.js 20 o posterior en el `PATH`. Lo usan la guardia y el validador. Sin Node la guardia no arranca y no puede avisar, así que lo comprueba Claude al empezar cada sesión y ofrece instalarlo; en Windows, con `winget install OpenJS.NodeJS.LTS`. Mientras falte, no hace commits ni push.
-- Git y el repositorio de EASY One en Bitbucket, con su entorno local montado (`CONTRIBUTING.md`, «Entorno local»): los tests con BD necesitan los servicios arrancados. Un token de API de Bitbucket con permiso sobre los PR, en `BITBUCKET_USER` y `BITBUCKET_TOKEN` de tu entorno. Sin él, abres y fusionas los PR desde la web.
-
-## Diferencias con el original
-
-| Original | easyone-orchestrator |
-|---|---|
-| Un humano y una sesión que orquesta casi sin intervención | Un humano y su sesión; das el ok en el primer criterio y en la construcción terminada |
-| Un `builder` que hace la historia entera | Un `builder` que hace un criterio por encargo |
-| `reviewer` después de cada builder | `reviewer` una vez por PR, en todos |
-| Las historias se escriben en el repositorio | Las historias se escriben en gg-ez (el enlace está pendiente) y viven en tu equipo |
-| Identificador por actividad (`ACC-002`) | El de la historia en gg-ez |
-| Un comando de tests | Varias fuentes de tests (Go con `go test -json`, Vitest, E2E); un criterio pasa si pasan todos sus tests |
-| Una lista de tests bloqueados en git | Una lista por historia, `.orchestrator/locked/<ID>.txt`, en tu equipo, con el commit en el que se bloqueó |
-| — | Auditoría por muestreo al cerrar cada entrega (`auditor`) |
-| Lecciones en `CLAUDE.md` | Las normas del proyecto: `CONTRIBUTING.md`, `CODING_STANDARDS.md` y los ADR |
-| GitHub y `gh` | Bitbucket |
-| Fusiona el humano | Fusionas tú, con Squash, después de que otra persona del equipo apruebe el PR |
+- Node.js 20 o posterior en el `PATH`. Lo usan la guardia y el validador. Sin Node la guardia no arranca y no puede avisar, así que lo comprueba Claude al empezar cada sesión y ofrece instalarlo. Mientras falte, no hace commits ni push.
+- Git, y `gh` si el proyecto está en GitHub.
 
 ## Versiones y actualizaciones
 
 El número de `version` en `.claude-plugin/plugin.json` decide qué recibes: Claude Code te deja en la versión que instalaste hasta que ese número cambia. Un cambio subido sin cambiar la versión no te llega.
 
-- **El número del medio** (`0.2.0` → `0.3.0`) cuando cambia cómo se trabaja.
-- **El último** (`0.2.0` → `0.2.1`) cuando solo se arregla algo.
+- **El número del medio** (`0.1.0` → `0.2.0`) cuando cambia cómo se trabaja.
+- **El último** (`0.1.0` → `0.1.1`) cuando solo se arregla algo.
 
-Se actualiza con `claude plugin update easyone-orchestrator@hyliacom` y reiniciando Claude Code.
+Se actualiza con `claude plugin update hyliacom-orchestrator@hyliacom-orchestrator` y reiniciando Claude Code.
 
-**De la 0.19 a la 0.20:** las historias, las listas de bloqueo y la auditoría dejan de ir en el repositorio. Si tenías algo en `story/<ID>`, `docs/rules/`, `docs/audits/` o `<storiesDir>/decisions/`, muévelo a `.orchestrator/` (las decisiones de arquitectura, a ADR) y excluye la carpeta. Una lista de bloqueo que no está en git necesita su línea `# commit <sha>`.
+## Relación con easyone-orchestrator
 
-## Traer mejoras del original
+Este repositorio empezó como copia de [`SergioHyliacom/Orquestador`](https://github.com/SergioHyliacom/Orquestador) en su 0.22.0, con todo su historial. Allí sigue `easyone-orchestrator`, que es el que usa EASY One, sin cambios. Lo que se mejore en uno (la guardia, el validador) se puede portar al otro a mano; las partes de EASY One (gg-ez, el repo de diseño de Sydney, sus normas) solo están allí.
 
-En este repositorio local, `main` es una copia del original y la adaptación vive en la rama `easyone`. En GitHub (`SergioHyliacom/Orquestador`), `main` es la adaptación: se sube con `git push fork easyone:main`.
-
-```
-git fetch upstream
-git switch main && git merge --ff-only upstream/main
-git switch easyone && git merge main
-```
-
-Las skills y los agentes siguen en inglés, como en el original: los lee el modelo, y así se fusionan mejor las mejoras. Lo que el plugin escribe en el proyecto de EASY One va en español.
+Las skills y los agentes van en inglés, como en el original: los lee el modelo. Lo que el plugin escribe en cada proyecto va en el idioma de ese proyecto (`language`).
 
 ## Estado
 
-- **Probado:** la guardia (escenarios simulados de cada rol, el cortocircuito del builder, las normas de easyone y las compuertas), la lectura de la salida de los tests (con salidas como las de Go, Vitest, Playwright, `node --test` y tsc, y calibrada con los 481 checks de 24 builders reales de octubre y noviembre) y el validador con resultados de Go (`go test -json` y JUnit) y Vitest, con `node --test "tests/*.test.mjs"`. `claude plugin validate` pasa.
-- **Sin probar todavía:** las skills y la instalación en el repositorio real de EASY One. La primera historia sirve de piloto.
+- **Probado:** la guardia (escenarios simulados de cada rol, el cortocircuito del builder, las compuertas, las normas configurables, los merges de GitHub y de Bitbucket), la lectura de la salida de los tests y el validador (resultados de Go, Vitest y JUnit, y ADR en sus formatos habituales), con `node --test "tests/*.test.mjs"`. `claude plugin validate` pasa.
+- **Sin probar todavía:** las skills en un proyecto real que no sea EASY One, y el flujo de PR de GitHub de principio a fin. El primer proyecto sirve de piloto.
 
 ## Autores
 
-Adaptación de Hyliacom con Claude (Claude Code, Opus 5.5) a partir del Orchestrator de Sydney y Claude. Licencia MIT; ver `LICENSE`.
+Hyliacom con Claude (Claude Code, Opus 5.5), a partir del Orchestrator de Sydney y Claude. Licencia MIT; ver `LICENSE`.

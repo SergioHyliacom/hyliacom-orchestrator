@@ -1,19 +1,20 @@
 {
-  "name": "easyone-orchestrator",
-  "version": "0.22.0",
-  "description": "Sergio's orchestrator for EASY One, kept to the project's CONTRIBUTING.md and CODING_STANDARDS.md. Stories written in gg-ez, built one criterion at a time with a builder agent. Code lives on Bitbucket.",
+  "name": "hyliacom-orchestrator",
+  "version": "0.1.0",
+  "description": "One person's orchestrator for any project: stories written with you, built one acceptance criterion at a time by a builder agent, reviewed before every pull request, kept to the project's own norms. GitHub and Bitbucket. Its files stay on your machine, out of git.",
   "author": {
     "name": "Hyliacom",
-    "url": "https://github.com/SergioHyliacom/Orquestador"
+    "url": "https://github.com/SergioHyliacom/hyliacom-orchestrator"
   },
-  "homepage": "https://github.com/SergioHyliacom/Orquestador",
+  "homepage": "https://github.com/SergioHyliacom/hyliacom-orchestrator",
   "license": "MIT",
   "keywords": [
     "orchestration",
     "subagents",
     "user-stories",
     "workflow",
-    "bitbucket",
-    "easyone"
+    "tdd",
+    "github",
+    "bitbucket"
   ]
 }

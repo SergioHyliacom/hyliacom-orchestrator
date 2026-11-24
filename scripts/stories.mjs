@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Story validator and map generator (easyone-orchestrator). No dependencies: Node >= 20.
+// Story validator and map generator (hyliacom-orchestrator). No dependencies: Node >= 20.
 //
 //   node stories.mjs                 generate the map with the last saved test results (map.md is never committed)
 //   node stories.mjs --tests         run the test commands (Go, Vitest, end-to-end...), then generate the map
@@ -84,7 +84,7 @@ const MAIN_RELEASE = config.mainRelease ?? RELEASES[0];
 const PERSONAS = config.personas ?? null;
 // One saved report per test source: .test-results, .test-results-1, ...
 const resultsFile = (i) => path.join(DIR, `.test-results${i ? `-${i}` : ""}`);
-// A story ID is a prefix and a number (EO-123). idPrefix pins the prefix; without it any such ID is accepted.
+// A story ID is a prefix and a number (ALT-001). idPrefix pins the prefix; without it any such ID is accepted.
 const ID_PREFIX = config.idPrefix ? escape(config.idPrefix) : "[A-Z][A-Z0-9]+";
 const STORY_ID = new RegExp(`^${ID_PREFIX}-\\d+$`);
 const MAP = path.join(DIR, "map.md");
@@ -197,7 +197,10 @@ const activities = readJson(path.join(DIR, "activities.json"));
 // ---------- Git: what this branch adds to the integration branch
 const gitRun = (a) => { try { return execFileSync("git", a, { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString(); } catch { return null; } };
 const orchestrator = existsSync(path.join(ROOT, ".orchestrator.json")) ? readJson(path.join(ROOT, ".orchestrator.json")) : {};
-const INTEGRATION_BRANCH = orchestrator.git?.integrationBranch ?? "develop";
+// The branch the stories merge into: .orchestrator.json → git.integrationBranch, else the remote's default branch, else main.
+const INTEGRATION_BRANCH = orchestrator.git?.integrationBranch
+  ?? gitRun(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])?.trim().replace(/^origin\//, "")
+  ?? "main";
 const INTEGRATION = `refs/remotes/origin/${INTEGRATION_BRANCH}`;
 // A pipeline clones one branch: bring the integration branch's ref.
 if (process.env.CI && gitRun(["rev-parse", "--verify", "--quiet", INTEGRATION]) === null) {
@@ -224,9 +227,13 @@ try {
     const m = name.match(/^(\d{4})-.*\.md$/);
     if (!m) continue;
     const text = lf(readFileSync(path.join(ADR_DIR, name), "utf8"));
-    const status = text.match(/^\s*-?\s*\*\*(?:Estado|Status):?\*\*:?\s*(.+)$/im)?.[1].trim() ?? "";
-    const title = text.match(/^#\s+\d+\.?\s*(.+)$/m)?.[1].trim() ?? name;
-    decisions.set(`ADR-${m[1]}`, { id: `ADR-${m[1]}`, title, status, file: rel(path.join(ADR_DIR, name)), open: /^(propuesta|propuesto|proposed)\b/i.test(status) });
+    // The status as ADRs write it: "- **Status:** proposed", "Status: proposed" (also in frontmatter), or a
+    // "## Status" heading with the status on its first line. Spanish "Estado" too.
+    const status = (text.match(/^\s*-?\s*\*\*(?:Estado|Status):?\*\*:?\s*(.+)$/im)?.[1]
+      ?? text.match(/^\s*(?:Estado|Status)\s*:\s*(.+)$/im)?.[1]
+      ?? text.match(/^#{2,}\s*(?:Estado|Status)\s*\n+\s*(.+)$/im)?.[1] ?? "").replace(/[*_`]/g, "").trim();
+    const title = text.match(/^#\s+(?:\d+\.?\s*)?(.+)$/m)?.[1].trim() ?? name;
+    decisions.set(`ADR-${m[1]}`, { id: `ADR-${m[1]}`, title, status, file: rel(path.join(ADR_DIR, name)), open: /^(propuesta|propuesto|proposed|draft|borrador)\b/i.test(status) });
   }
 } catch { /* no ADR folder */ }
 
@@ -290,7 +297,7 @@ function storyIdOfBranch(branch) {
 // The tags this branch's own changes need and its story lacks: [{ story, tag, file }]. Only a story branch has a story.
 function riskMisses() {
   if (!AHEAD || !Object.keys(RISK_PATHS).length) return [];
-  const branch = process.env.BITBUCKET_BRANCH ?? gitRun(["symbolic-ref", "--short", "HEAD"])?.trim() ?? "";
+  const branch = process.env.BITBUCKET_BRANCH || process.env.GITHUB_HEAD_REF || (gitRun(["symbolic-ref", "--short", "HEAD"])?.trim() ?? "");
   const id = storyIdOfBranch(branch);
   const story = stories.find((s) => s.id === id);
   if (!story) return [];
@@ -362,7 +369,7 @@ const suppressionLine = (s) => SUPPRESSIONS_MODE === "enforce"
 // ---------- Context docs: what every session reads points to files and commands that exist
 
 // .orchestrator.json → contextDocs lists the texts sessions and agents read first ("CLAUDE.md", "README.md",
-// "CONTRIBUTING.md", "CODING_STANDARDS.md", the modules' READMEs). A path or a pnpm script one of them names must exist: a stale one sends every agent the wrong
+// "CONTRIBUTING.md", the modules' READMEs). A path or a pnpm script one of them names must exist: a stale one sends every agent the wrong
 // way, and nobody notices until one reads both. Read: what is in inline backticks, and the lines of a fenced block
 // whose language is a shell. A path is looked up next to the doc and from the repository's root, in what git tracks:
 // a disk on Windows or macOS ignores case and holds files nobody committed, the pipeline's does neither, and both
@@ -552,8 +559,8 @@ const sameFile = (a, b) => { const [x, y] = a.length >= b.length ? [a, b] : [b, 
 
 function testResult(c) {
   if (!tests) return "noResults";
-  // Go reports a subtest as Parent/[EO-123.1]_name, and Playwright's JUnit report puts the describe blocks
-  // first, Login › [EO-123.1] name: the ID may also follow a slash or a ›.
+  // Go reports a subtest as Parent/[ALT-001.1]_name, and Playwright's JUnit report puts the describe blocks
+  // first, Login › [ALT-001.1] name: the ID may also follow a slash or a ›.
   const byId = tests.filter((t) => t.title.startsWith(`[${c.id}]`) || t.title.includes(`/[${c.id}]`) || t.title.includes(`› [${c.id}]`));
   // Parameterised tests (it.each) report %s, %d... substituted: treat them as wildcards.
   const pattern = c.ref && new RegExp("^" + c.ref.title.split(/%[sdifjo#%]/).map(escape).join(".*") + "$");
@@ -733,7 +740,7 @@ if (flag("--check")) {
   }
   errors.push(...staleRiskPaths(), ...staleContextRefs());
   // Opt-in, but never silent: a project without the list should know its texts go unchecked.
-  if (!CONTEXT_DOCS.length) console.log(`Note: .orchestrator.json has no contextDocs, so no text is checked for stale paths or pnpm scripts. Add the texts every session reads: ["CLAUDE.md", "README.md", "CONTRIBUTING.md", "CODING_STANDARDS.md", "modules/*/README.md", "apps/*/README.md"].`);
+  if (!CONTEXT_DOCS.length) console.log(`Note: .orchestrator.json has no contextDocs, so no text is checked for stale paths or pnpm scripts. Add the texts every session reads, such as ["CLAUDE.md", "README.md", "CONTRIBUTING.md"].`);
   // The main release must be green: a failing, failing-test or skipped criterion fails the check.
   for (const s of main) for (const c of s.criteria) {
     if (c.kind === "failing") errors.push(`${s.file}: ${c.id} is marked failing in ${MAIN_RELEASE}.`);

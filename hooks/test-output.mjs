@@ -17,7 +17,7 @@ const CHECK = new RegExp([
 export const isCheckCommand = (command) => CHECK.test(String(command ?? ""));
 
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
-// turbo and pnpm -r put the package and the task before each line: "@easyone/panel:typecheck: src/a.ts(3,1): …".
+// turbo and pnpm -r put the package and the task before each line: "@acme/web:typecheck: src/a.ts(3,1): …".
 const PREFIX = /^((@[\w.-]+\/)?[\w.-]+(:[\w-]+)+:\s|[\w.@-]+\/[\w./@-]+ [\w:-]+:\s)/;
 
 // What changes from one attempt to the next while the failure stays the same: colours, durations, positions,
@@ -42,12 +42,12 @@ export function normalize(line) {
 
 // Each runner names what failed in its own way: one entry per failing test or error, without its position.
 const FAILING = [
-  // go test: --- FAIL: TestX/[EO-1.1]_nombre (0.01s); a package that does not build; a compile error; a panic.
+  // go test: --- FAIL: TestX/[ALT-1.1]_nombre (0.01s); a package that does not build; a compile error; a panic.
   [/^\s*--- FAIL: (\S+)/, (m) => `go ${m[1]}`],
   [/^FAIL\s+(\S+)\s+\[(build|setup) failed\]/, (m) => `go ${m[2]} failed ${m[1]}`],
   [/^(\S+\.go):\d+(:\d+)?: (.+)$/, (m) => `go ${m[1]}: ${m[3]}`],
   [/^panic: (.+)$/, (m) => `panic ${m[1]}`],
-  // Vitest: FAIL  src/a.test.ts > grupo > [EO-1.1] nombre; × [EO-1.1] nombre
+  // Vitest: FAIL  src/a.test.ts > grupo > [ALT-1.1] nombre; × [ALT-1.1] nombre
   [/^\s*FAIL\s+(\S+\.[cm]?[jt]sx?)\b\s*(.*)$/, (m) => `vitest ${m[1]} ${m[2]}`],
   [/^\s*[×✗]\s+(.+)$/, (m) => `vitest ${m[1]}`],
   // Playwright: ✘ 1 [chromium] › e2e/a.e2e.ts:12:5 › nombre; 1) [chromium] › …

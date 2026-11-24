@@ -12,14 +12,14 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const GUARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks", "guard.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 
 function project({ config = {}, branch = "feature/pru-1-guardar-nota" } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "guard-gates-"));
   const put = (rel, text) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), text); };
   const git = (...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir, stdio: "ignore" });
   git("init", "-q", "-b", branch);
-  // As in EASY One: the orchestrator's files are one person's, out of git.
+  // As in a shared repository: the orchestrator's files are one person's, out of git.
   appendFileSync(path.join(dir, ".git", "info", "exclude"), ".orchestrator.json\n.orchestrator/\n");
   put(".orchestrator.json", JSON.stringify({ roles: { builder: { onStop: [] } }, ...config }));
   put("apps/api/nif.go", "package api\n");

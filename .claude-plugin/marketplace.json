@@ -1,14 +1,14 @@
 {
-  "name": "hyliacom",
-  "description": "Hyliacom's plugin: the EASY One orchestrator",
+  "name": "hyliacom-orchestrator",
+  "description": "Hyliacom's orchestrator for Claude Code, for any project",
   "owner": {
     "name": "Hyliacom"
   },
   "plugins": [
     {
-      "name": "easyone-orchestrator",
+      "name": "hyliacom-orchestrator",
       "source": "./",
-      "description": "EASY One orchestrator, for one developer: stories from gg-ez, one criterion at a time, Bitbucket"
+      "description": "One person's orchestrator: stories, one criterion at a time with a builder, a review before every pull request, the project's norms first. GitHub and Bitbucket"
     }
   ]
 }

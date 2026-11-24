@@ -45,4 +45,4 @@ Retire a role when it stops producing findings or deliverables, or when its work
 
 ## Naming
 
-A role name is a lowercase noun or noun phrase with hyphens: `legal-reviewer`, `data-engineer`. An instance adds the scope: `legal-reviewer-EO-123`. A role means the same thing in every project that has it.
+A role name is a lowercase noun or noun phrase with hyphens: `legal-reviewer`, `data-engineer`. An instance adds the scope: `legal-reviewer-ALT-001`. A role means the same thing in every project that has it.

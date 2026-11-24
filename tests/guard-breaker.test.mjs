@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const GUARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks", "guard.mjs");
-const BUILDER = "easyone-orchestrator:builder";
+const BUILDER = "hyliacom-orchestrator:builder";
 
 function project() {
   const dir = mkdtempSync(path.join(tmpdir(), "guard-breaker-"));
@@ -107,10 +107,10 @@ test("la vuelta que fuerza la guardia al parar es la misma ejecución", () => {
 
 test("los roles que no escriben código no cuentan ni se frenan", () => {
   const p = project();
-  for (let i = 0; i < 3; i++) p.guard({ hook_event_name: "SubagentStop", agent_id: "r1", agent_type: "easyone-orchestrator:researcher", stop_hook_active: false });
+  for (let i = 0; i < 3; i++) p.guard({ hook_event_name: "SubagentStop", agent_id: "r1", agent_type: "hyliacom-orchestrator:researcher", stop_hook_active: false });
   assert.ok(!p.hasBreaker());
   for (let i = 0; i < 3; i++) stop(p, "a1", "builder-PRU-1: DONE");
-  assert.ok(!asks(launch(p, "easyone-orchestrator:researcher")));
+  assert.ok(!asks(launch(p, "hyliacom-orchestrator:researcher")));
 });
 
 test("maxBuilderRuns cambia el límite, y 0 lo apaga", () => {
