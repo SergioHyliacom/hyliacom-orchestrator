@@ -85,6 +85,12 @@ function integrationBranch() {
 let protectedCache;
 const protectedBranches = () => (protectedCache ??= git.protectedBranches ?? [...new Set(["main", "master", integrationBranch()])]);
 const broadAddBlocked = git.blockBroadAdd !== false;
+// git.mode: "pr" (the default) has the orchestrator branch, commit each criterion, push and open and merge the pull
+// requests on its human's ok; "manual" leaves every commit, push and pull request to the human, and the session only
+// reads git.
+if (git.mode !== undefined && !["pr", "manual"].includes(git.mode)) block(`${STATE}.json → git.mode is "${git.mode}": it must be pr or manual.`);
+const manualGit = git.mode === "manual";
+const MANUAL = "git.mode is manual in this project: your human makes the commits and handles the remote and the pull requests.";
 // Per-role settings live in .orchestrator.json → roles, keyed by the role name without the plugin prefix.
 const roleConfig = config.roles?.[agentType.split(":").pop()] ?? {};
 const rolePaths = Array.isArray(roleConfig.paths) && roleConfig.paths.length ? roleConfig.paths : null;
@@ -258,7 +264,8 @@ function lastRun(file) {
 // `gh pr merge` on GitHub, or a call to the pull request's /merge endpoint (GitHub's /pulls/<n>/merge, Bitbucket's
 // /pullrequests/<id>/merge), on whatever host or variable the URL is built from.
 const MERGE = /\/(pullrequests|pulls)\/[^/\s"']+\/merge\b/i;
-const isGhMerge = (t) => /^gh(\.exe)?$/i.test(path.basename(t[0] ?? "")) && t.some((x, i) => x === "pr" && t[i + 1] === "merge");
+const isGhPr = (t, verbs) => /^gh(\.exe)?$/i.test(path.basename(t[0] ?? "")) && t.some((x, i) => x === "pr" && verbs.includes(t[i + 1]));
+const isGhMerge = (t) => isGhPr(t, ["merge"]);
 
 // ---------- Orchestrator-owned files that git may not see
 // The stories, the lock lists and the map can live outside git (.git/info/exclude): the plugin is one person's,
@@ -491,6 +498,11 @@ function checkGit(args, cwd) {
     block(`role agents never run git ${sub}: only the orchestrator commits, after it checks your evidence. Leave the change in the tree and report it.`);
   }
 
+  // In manual mode the session only reads git: whatever makes, replays or sends commits is the human's.
+  if (manualGit && ["commit", "push", "merge", "rebase", "cherry-pick", "pull", "am", "revert"].includes(sub)) {
+    block(`${MANUAL} Do not run git ${sub}: give them the exact command (the files by name and the message) and wait for them to run it.`);
+  }
+
   if (sub === "push") {
     if (has(/^(--force|--force-with-lease|--force-if-includes)/) || has(/^-[a-z]*f/i) || has(/^\+/)) block("force push is blocked.");
     if (has(/^--no-verify$/)) block("--no-verify is blocked. Fix the failing hook instead.");
@@ -609,6 +621,9 @@ if (input.hook_event_name === "PreToolUse" && ["Bash", "PowerShell"].includes(in
       continue;
     }
     // A merge through gh, or through the API: the id may come from a variable; then the merge is still a merge.
+    if (manualGit && (isGhPr(tokens, ["create", "merge", "close", "ready"]) || tokens.some((t) => MERGE.test(t)))) {
+      block(`${MANUAL} Do not open, merge or close one: give them the title, the body and the strategy instead.`);
+    }
     if (isGhMerge(tokens) || tokens.some((t) => MERGE.test(t))) {
       if (inSubagent) block("role agents never merge. The product owner merges, or asks the orchestrator to.");
       if (git.allowPush === false) confirm("git.allowPush is false in this project, so every merge needs the product owner's confirmation.");

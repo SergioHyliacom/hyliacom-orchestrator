@@ -6,6 +6,7 @@ The project's norms (`.orchestrator.json` → `norms`: its `CONTRIBUTING.md`, `C
 
 | Key | What it says | Default |
 |---|---|---|
+| `mode` | `pr`: you branch, commit, push, open and merge the pull requests on your human's ok; `manual`: your human makes every commit and handles the remote, and you only read git (below, "Manual mode") | `pr` |
 | `host` | where the pull requests live: `github` or `bitbucket` | read from `git remote get-url origin` |
 | `integrationBranch` | where the stories merge | the remote's default branch, else `main` |
 | `productionBranch` | what is in production, when it is not the integration branch | none: the integration branch is production |
@@ -15,6 +16,15 @@ The project's norms (`.orchestrator.json` → `norms`: its `CONTRIBUTING.md`, `C
 | `requiredApprovals` | how many people other than your human must approve a pull request | `0` |
 | `allowPush` | `false`: Claude Code asks your human to confirm each push and each merge | `true` |
 | `blockBroadAdd` | `false` lets `git add .`, `-A` and `--all` through | `true` |
+
+## Manual mode
+
+With `git.mode: "manual"` your human makes the commits, and pushes and opens pull requests when and how they want. You only read git (`status`, `diff`, `log`, `show`, `fetch`); the guard blocks your `commit`, `push`, `merge`, `rebase`, `cherry-pick`, `pull`, `am` and `revert`, and opening, merging or closing a pull request. The rest of this file applies to what you give them instead:
+
+- **The branch:** at the kickoff, say which branch the story would take (`feature/<id>-<slug>`) and ask whether they create it; work on the branch they are on.
+- **Each commit:** when a criterion is accepted, give them the command, ready to paste, with the files of the builder's report by name and the message in the project's format: `git add <file> <file> && git commit -m "feat(notes): ALT-001.1 …"`. Wait until they say it is done, and check it with `git log -1 --stat` (the files and the message) before you brief the next criterion: the next builder's diff must start from a clean tree, and the builder runs count from the last commit. If they would rather commit later, tell them once that the next criterion's evidence will mix with this one's, and go on only on their yes.
+- **Push and pull request:** at the close, when they use pull requests, give them the title, the body (`stories.mjs --pr <ID>`) and the strategy of the "Merge" table, as text they paste. Never ask for their credentials: you need none.
+- **What reads the remote** (the pull request's approvals and checks) is skipped unless they ask you to look.
 
 ## Branches
 

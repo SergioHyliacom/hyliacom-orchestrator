@@ -5,8 +5,9 @@ Plugin de Claude Code para desarrollar cualquier proyecto historia a historia, c
 - **Lo usa una sola persona y es solo suyo.** Tu sesión de Claude orquesta tu trabajo. Sus ficheros viven en tu equipo, excluidos de git, y nada del método entra en el repositorio del proyecto. Al empezar, y cada vez que le preguntas «¿qué me toca?», como te salga, te dice en qué punto estás y qué sigue, y te pregunta sí o no.
 - **Mandan las normas del proyecto.** Los documentos que pongas en `norms` (`CLAUDE.md`, `CONTRIBUTING.md`, sus estándares de código…) y sus ADR aceptados obligan siempre. El plugin los aplica y no relaja ninguno: si choca con ellos, ganan ellos. Donde el proyecto no dice nada, el plugin trae valores por defecto razonables (Conventional Commits, `feature/<id>-<slug>`, Squash).
 - **Las historias se escriben contigo** (skill `stories`), con sus criterios de aceptación, y viven en tu equipo.
-- **Un criterio cada vez.** El agente `builder` escribe el test, lo ve fallar, lo hace pasar y se para; la sesión comprueba las pruebas y hace el commit. Tú das el ok en el primer criterio y en la construcción terminada.
+- **Un criterio cada vez.** El agente `builder` escribe el test, lo ve fallar, lo hace pasar y se para; la sesión comprueba las pruebas y hace el commit, o te lo da hecho para que lo hagas tú (ver «Dos formas de trabajar con git»). Tú das el ok en el primer criterio y en la construcción terminada.
 - **Cada PR lleva revisión** del agente `reviewer` antes de abrirse, más las aprobaciones de otras personas que pida el proyecto (`git.requiredApprovals`, 0 por defecto). Se fusiona con la estrategia que digas (Squash por defecto) y siempre con tu ok.
+- **Dos formas de trabajar con git**, que eliges al prepararlo: que el orquestador haga los commits y los PR, o hacerlos tú a mano.
 - **GitHub y Bitbucket.** Cada proyecto dice cuál usa (`git.host`): en GitHub con `gh`; en Bitbucket, por su API.
 - **Una guardia** (un hook) impide lo peligroso: ningún agente hace commit, push ni merge; cada uno escribe solo donde le toca; nadie toca los tests bloqueados, las historias ni las normas del proyecto; y nada se salta los hooks de git ni fuerza un push.
 - **Un builder que da vueltas se para pronto.** La guardia lee la salida de cada test y cada check que lanza, también cuando la recorta con `| tail` o `| grep`. El mismo fallo tres veces en una ejecución, o diez checks fallidos, y el builder deja de probar y te dice qué intentó. Tras tres ejecuciones sin commit, te pregunta antes de lanzar otra.
@@ -42,7 +43,8 @@ En un proyecto sin `.orchestrator.json` el plugin no hace nada: la guardia está
    ```
 
 2. Lee el proyecto: sus normas, sus comprobaciones (scripts, CI, hooks de git), sus tests y su git (GitHub o Bitbucket, rama por defecto, idioma y formato de los commits).
-3. Te propone `.orchestrator.json`. Lo principal:
+3. **Te hace unas preguntas**, cada una con la opción recomendada primero. La primera siempre es cómo trabajas con git (abajo, «Dos formas de trabajar con git»). Si eliges que haga los PR, pregunta también dónde viven (GitHub o Bitbucket), si alguien más los aprueba, si te pregunta antes de cada push y cada fusión, y cómo se fusionan. Si no lo ha podido deducir, pregunta además el idioma del repositorio y si las comprobaciones rápidas que ha encontrado son las buenas.
+4. Con tus respuestas escribe `.orchestrator.json`, te lo enseña y espera tu ok. Lo principal:
 
    | Clave | Qué es |
    |---|---|
@@ -50,17 +52,30 @@ En un proyecto sin `.orchestrator.json` el plugin no hace nada: la guardia está
    | `language` | El idioma de lo que se escribe en el repositorio: commits, PR, README |
    | `norms` | Los documentos que obligan; ningún agente los toca. Sin ella: `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` y `CODING_STANDARDS.md` |
    | `adrDir` | Los ADR del proyecto (`docs/adr` por defecto). Una historia puede esperar a uno con `blocked_by: [ADR-0023]` |
-   | `git` | `host` (`github` o `bitbucket`), `integrationBranch` (por defecto la rama por defecto del remoto), `productionBranch`, `mergeStrategy` (`squash`), `releaseStrategy`, `requiredApprovals` (0), `allowPush` (`false` para que cada push y cada fusión te pregunten) |
+   | `git` | `mode` (`pr` o `manual`), `host` (`github` o `bitbucket`), `integrationBranch` (por defecto la rama por defecto del remoto), `productionBranch`, `mergeStrategy` (`squash`), `releaseStrategy`, `requiredApprovals` (0), `allowPush` (`false` para que cada push y cada fusión te pregunten) |
    | `verify` | `all`, las comprobaciones completas al cerrar cada construcción, y los límites del builder: `maxBuilderRuns` (3), `maxSameFailure` (3), `maxFailedChecks` (10), `checkTimeout` (300 s) |
    | `roles` | Las comprobaciones rápidas del builder (`roles.builder.onStop`) y, si hace falta, sus rutas (`paths`). El desarrollo se abre cuando existe |
    | `contextDocs` | Los textos que `stories.mjs --check` vigila para que no nombren rutas ni scripts que ya no existen |
    | `riskTags`, `riskPaths` | El mapa de riesgo (`references/risk-map.md`) |
    | `gates` | Las compuertas, en `observe` por defecto (`references/gates.md`) |
 
-4. Crea la carpeta de historias, con `activities.json` y `stories.config.json`. Este último lleva las personas, las entregas y una fuente de tests por cada runner: `jest-json` (Vitest, Jest), `junit` (PHPUnit, pytest, Playwright…) o `go-json` (`go test -json`).
-5. Dibuja contigo el mapa de riesgo, comprueba tu acceso a GitHub o Bitbucket y escribe la primera historia, que sirve de piloto.
+5. Crea la carpeta de historias, con `activities.json` y `stories.config.json`. Este último lleva las personas, las entregas y una fuente de tests por cada runner: `jest-json` (Vitest, Jest), `junit` (PHPUnit, pytest, Playwright…) o `go-json` (`go test -json`).
+6. Dibuja contigo el mapa de riesgo, comprueba tu acceso a GitHub o Bitbucket si trabaja con PR, y escribe la primera historia, que sirve de piloto.
+
+## Dos formas de trabajar con git
+
+| | `git.mode: "pr"` (por defecto) | `git.mode: "manual"` |
+|---|---|---|
+| La rama de la historia | La crea el orquestador | Te dice cuál tocaría y trabajas en la que estés |
+| Los commits | Uno por criterio, en cuanto lo compruebas | Te da el comando listo para pegar (ficheros y mensaje) y espera a que hagas el commit antes del siguiente criterio |
+| Push, PR y fusión | Los hace con tu ok, en GitHub o Bitbucket | Los haces tú cuando quieras; al cerrar te da el título y el cuerpo del PR |
+| Qué impide la guardia | Commits en ramas protegidas, push forzado, saltarse hooks | Además, cualquier commit, push, merge, pull, rebase o PR de la sesión: solo lee git |
+
+En los dos modos se trabaja igual con las historias, los criterios, los tests bloqueados y la revisión. En el manual, esperar a tu commit entre criterios es lo que permite comprobar que cada criterio toca solo sus ficheros, y el contador de ejecuciones del builder se reinicia con tu commit.
 
 ## GitHub y Bitbucket
+
+Solo para el modo `pr`.
 
 - **GitHub:** necesita `gh` con sesión iniciada (`gh auth login`). Los PR se abren con `gh pr create` y se fusionan con `gh pr merge`.
 - **Bitbucket:** no tiene CLI oficial. Necesita un token de API con permisos de PR en tu entorno: `BITBUCKET_USER`, que es el email de tu cuenta Atlassian, y `BITBUCKET_TOKEN`.

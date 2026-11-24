@@ -224,3 +224,31 @@ test("los tests de Go se leen de go test -json: un subtest saltado no cuenta com
   assert.match(readFileSync(path.join(p.dir, ".orchestrator/historias/map.md"), "utf8"), /⚠️ \[PRU-9\]/, skip.stdout + skip.stderr);
   assert.match(p.stories("--check").stderr, /the test for PRU-9\.1 is skipped/);
 });
+
+test("git.mode manual: the session only reads git, and leaves commits, pushes and pull requests to the human", () => {
+  const p = project({ orchestrator: { git: { mode: "manual" } } });
+  p.git("switch", "-q", "-c", "feature/pru-9-save-note");
+  const bash = (command) => p.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+  for (const command of ["git commit -m 'feat(notes): PRU-9.1 x'", "git push -u origin feature/pru-9-save-note", "git merge origin/develop",
+    "git pull --ff-only", "git rebase origin/develop", "gh pr create --title x --body-file b.md", "gh pr merge 3 --squash",
+    "curl -X POST https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/3/merge"]) {
+    const r = bash(command);
+    assert.equal(r.status, 2, `${command}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /git\.mode is manual/);
+  }
+  for (const command of ["git status", "git diff HEAD", "git log -1 --stat", "git fetch --prune", "gh pr view 3 --json reviews"]) {
+    const r = bash(command);
+    assert.equal(r.status, 0, `${command}: ${r.stderr}`);
+  }
+});
+
+test("git.mode pr is the default, and an unknown mode is a configuration error", () => {
+  const pr = project({ orchestrator: { git: {} } });
+  pr.git("switch", "-q", "-c", "feature/pru-9-save-note");
+  const commit = pr.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "git commit -m 'feat(notes): PRU-9.1 x'" } });
+  assert.equal(commit.status, 0, commit.stderr);
+  const bad = project({ orchestrator: { git: { mode: "auto" } } });
+  const r = bad.guard({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "git status" } });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /git\.mode is "auto": it must be pr or manual/);
+});

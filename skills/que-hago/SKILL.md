@@ -17,14 +17,14 @@ Read all of this before you say anything. Run the independent reads in parallel.
    - Note local branches whose remote is gone.
    - Note the stories' branches (`feature/<id>-…`, `fix/<id>-…`) here and on the remote, and for each whether `.orchestrator/locked/<ID>.txt` exists. Leave the bots' and the experiments' branches out (`deps/`, `renovate/`, `dependabot/`, `spike/`).
 2. **Stories.** Run `node <scripts>/stories.mjs --json` once (the guard names `<scripts>`). If `node` is missing, say so first and offer to install it (`orchestrate` skill, §1, step 1). For each story in progress: the criteria by marker, and what it waits for (an open question, a proposed ADR). The stories not started: no branch, not done and not discarded.
-3. **Pull requests.** On the project's host (`orchestrate` skill, `references/git.md`; GitHub with `gh pr list --author @me --json number,title,headRefName,reviewDecision,statusCheckRollup`, Bitbucket with `BITBUCKET_USER` and `BITBUCKET_TOKEN`): their open pull requests, and for each: its approvals against `git.requiredApprovals`, changes requested, open tasks on Bitbucket, last checks green or red. Without access, skip this, say so once and offer to set it up (`orchestrate` skill, `references/access.md`).
+3. **Pull requests.** Only when `git.mode` is `pr` (in `manual` your human handles them; skip this unless they ask). On the project's host (`orchestrate` skill, `references/git.md`; GitHub with `gh pr list --author @me --json number,title,headRefName,reviewDecision,statusCheckRollup`, Bitbucket with `BITBUCKET_USER` and `BITBUCKET_TOKEN`): their open pull requests, and for each: its approvals against `git.requiredApprovals`, changes requested, open tasks on Bitbucket, last checks green or red. Without access, skip this, say so once and offer to set it up (`orchestrate` skill, `references/access.md`).
 4. **The ledger.** `.orchestrator/state.md`: the stories in progress, and what this session left half done last time.
 
 ## 2. Decide what is next
 
 Take the first rule that applies. The rest become the other lines of your answer.
 
-1. **Work left half done in this session.** Changes not committed, a criterion waiting for the ok, a finished build waiting for the ok, a commit not pushed. Finish it first.
+1. **Work left half done in this session.** Changes not committed, a criterion waiting for the ok, a finished build waiting for the ok, a commit not pushed. Finish it first; in `manual` mode, a commit or a push still to do is your human's: give them the command again.
 2. **Pull requests:**
    - merge one that has its approvals, is green and has no open task (`references/development.md`, "Merge");
    - fix one with changes requested, an open task or a red build.

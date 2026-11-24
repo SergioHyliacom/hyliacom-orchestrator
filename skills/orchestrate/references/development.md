@@ -4,6 +4,8 @@ The `builder` does the code; you brief it and check its evidence (`references/de
 
 **One branch per story:** `feature/<id>-<slug>` (`references/git.md`).
 
+**When `git.mode` is `manual`,** your human makes every commit, push and pull request; you only read git, and give them each command or text instead (`references/git.md`, "Manual mode"). Below, "create the branch", "commit", "push", "open the pull request" and "merge" mean: give your human the command or the text, wait until they say it is done, and check it with `git log` or `git status`. The review is of the commits they made: its `Commit:` is `git rev-parse HEAD` once the story's last commit is in, and its diff `git diff <the commit HEAD was at the kickoff>...<that commit>`, so write that commit in your ledger at the kickoff.
+
 ## Kickoff
 
 1. **Read the story with your human first.** When a criterion is ambiguous, contradicts another, lacks a state or an error, or cannot be built with what exists, write it under **Open questions**, one line per criterion ID, and take it to your human before anything is built.

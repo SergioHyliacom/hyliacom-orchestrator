@@ -20,11 +20,31 @@ Read, in parallel, before you propose anything:
 - **Its tests:** which runners, and how each writes a report the validator reads: `jest-json` (Vitest's and Jest's `--reporter=json`), `junit` (PHPUnit, pytest, Playwright, gotestsum…) or `go-json` (`go test -json`).
 - **Its git:** `git remote get-url origin` (GitHub or Bitbucket), the remote's default branch, other long-lived branches (`develop`, `main`), the language and format of its recent commits, a pull request template.
 
-What you cannot find out, ask your human, all in one message.
+## 3. Ask your human
 
-## 3. `.orchestrator.json`
+Ask before you write anything, with the question tool when the session has one, so each answer is one click. Put the option that fits what you read first, marked as recommended, and say in one line what each option means for them. Ask each question once; skip one only when the project's norms already answer it, and say so.
 
-Propose it to your human, with a line on each key you set; leave out what takes its default.
+**First, always: how they work with git.**
+
+| Option | What the orchestrator does | `.orchestrator.json` |
+|---|---|---|
+| **It makes the commits and the pull requests** | creates the story's branch, commits each criterion once it is green, pushes, opens the pull request and merges it on their ok | `git.mode: "pr"` |
+| **I make the commits myself** | never commits, pushes or opens a pull request: after each criterion it gives them the files and the message, and waits for their commit before the next one; at the close, it gives them the title and the body of the pull request, if they open one | `git.mode: "manual"` |
+
+**Then, only with `pr`,** in one round:
+
+- **Where the pull requests live,** GitHub or Bitbucket, when the remote does not say it (`git.host`).
+- **Whether someone else approves them:** nobody (`git.requiredApprovals: 0`), one person (`1`), or what the norms say.
+- **Whether you ask before each push and each merge:** yes (`git.allowPush: false`, recommended) or no.
+- **How they merge,** when the norms do not say it: squash (recommended), merge commit or rebase (`git.mergeStrategy`).
+
+**And in both modes,** when you could not tell from the project: the language the repository is written in (`language`), and whether the fast checks you found are the right ones for the builder (`roles.builder.onStop`).
+
+Anything else you cannot find out, ask in the same round, never one question at a time.
+
+## 4. `.orchestrator.json`
+
+Write it from their answers and what you read, show it to them with a line on each key you set, and wait for their ok; leave out what takes its default.
 
 ```json
 {
@@ -34,6 +54,7 @@ Propose it to your human, with a line on each key you set; leave out what takes 
   "adrDir": "docs/adr",
   "contextDocs": ["CLAUDE.md", "README.md", "CONTRIBUTING.md"],
   "git": {
+    "mode": "pr",
     "host": "github",
     "integrationBranch": "main",
     "mergeStrategy": "squash",
@@ -56,7 +77,7 @@ Propose it to your human, with a line on each key you set; leave out what takes 
 | `norms` | the documents that bind; no role agent edits them | `references/where-things-live.md` |
 | `adrDir` | the project's ADRs, which a story can wait for | the `stories` skill, "Decisions" |
 | `contextDocs` | the texts whose paths and `pnpm` scripts `--check` keeps from going stale | `references/where-things-live.md` |
-| `git` | host, branches, strategy, approvals, push | `references/git.md` |
+| `git` | the mode (`pr` or `manual`), host, branches, strategy, approvals, push | `references/git.md` |
 | `verify.all` | the full checks, run once at the close of each build | `references/development.md` |
 | `verify.maxBuilderRuns`, `maxSameFailure`, `maxFailedChecks`, `checkTimeout` | when a builder that does not converge stops: 3 runs without a commit, the same failure 3 times, 10 failed checks in a run, 300 seconds per check at its stop; `0` switches the first three off | `references/delegation.md` |
 | `roles` | the builder's fast checks (`onStop`) and, when needed, the paths it may write (`paths`); other roles of the project | `references/roles.md` |
@@ -66,7 +87,7 @@ Propose it to your human, with a line on each key you set; leave out what takes 
 
 Leave `roles` out until the fast checks run green on the integration branch: without it, development is not open, and nobody builds against checks that already fail.
 
-## 4. The stories' folder
+## 5. The stories' folder
 
 In `<storiesDir>`:
 
@@ -86,6 +107,6 @@ In `<storiesDir>`:
 
 Run `node <scripts>/stories.mjs` once: it must write `map.md` with no errors.
 
-## 5. The risk map, and the first story
+## 6. The risk map, and the first story
 
-Draw the risk map with your human (`references/risk-map.md`). Then check your human's access to the host (`references/access.md`), and write the first story with them (the `stories` skill). Its kickoff is the pilot of the whole setup.
+Draw the risk map with your human (`references/risk-map.md`). Then, in `pr` mode, check your human's access to the host (`references/access.md`), and write the first story with them (the `stories` skill). Its kickoff is the pilot of the whole setup.
