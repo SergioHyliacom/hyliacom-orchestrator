@@ -5,8 +5,10 @@
 Ask in this order and stop at the first match:
 
 1. **Trivial?** A one-line fix, a rename, a lookup → do it yourself.
-2. **Must someone other than the author judge it?** A review → a role with a clean context. It gets the diff and the story, never your reasoning.
-3. **Heavy reading that would flood your context?** Research, comparing sources → a `researcher`. Independent questions run in parallel.
+2. **Must someone other than the author judge it?** A review → two `reviewer`s with a clean context, one per lens, at the same time (`references/development.md`, "Review"). They get the review pack and the story, never your reasoning.
+3. **Heavy reading that would flood your context?** Research, comparing sources → a `researcher`. Independent questions run in parallel: one researcher each, launched in the same message.
+
+Agents that only read can run at once: launch them in the same message, and each Agent call runs alongside the others. Only one writer runs at a time.
 4. **Code?** → the `builder`, one run at a time. Never write a story's code yourself while the builder owns the criterion.
 
 Code outside a story goes to the builder too, as a task (`references/outside-stories.md`). The stories and the rules belong to no builder: you edit them.
@@ -19,7 +21,7 @@ A builder that reports BLOCKED goes to your human. The guard counts the builder 
 
 `builder` is the only role that writes code; `reviewer`, `researcher` and `auditor` are read-only. No agent commits: you do, once you have checked its evidence, and the guard blocks a subagent's `git commit`, `merge`, `pull`, `rebase`, `cherry-pick`, `am` and `revert`. A project role writes only when `.orchestrator.json` → `roles.<role>.paths` gives it paths, and only in them; every other subagent, a general-purpose one too, is read-only for the guard. Call them through the Agent tool as `hyliacom-orchestrator:<role>`; your own roles in `.claude/agents/` by their name. Before creating a role, read `references/roles.md`.
 
-Name every instance `<role>-<scope>`, the scope being the story ID or a short topic (`reviewer-ALT-001`, `researcher-payments`), and use the name in the task description.
+Name every instance `<role>-<scope>`, the scope being the story ID or a short topic (`builder-ALT-001`, `researcher-payments`), and a reviewer adds its lens (`reviewer-ALT-001-tests`, `reviewer-ALT-001-code`). Use the name in the task description.
 
 ## Brief
 
@@ -31,6 +33,8 @@ Story: <absolute path of the story file>   (a task: "none", and the branch)
 Change: <criterion ID> | refactor <criterion ID> | task <slug>: <what changes>   (reviewers: "Judge: <what>")
 Request: <your human's words that ask for this work, verbatim — a task, a refactor, a change they asked for at their ok; omit it when the story's criterion is the whole request>
 Commit: <the exact commit to judge — reviewers only; a re-review also names the commit already reviewed>
+Pack: <the review pack's path, from stories.mjs --review — reviewers only>
+Lens: <tests | code — reviewers only; a re-review also names the lens's earlier report>
 Read first: <the norms that apply, by document and section (`.orchestrator.json` → `norms`, an ADR), the module's README, the project's template or example module as the pattern when it has one, and the code the work touches>
 Constraints: <invariants, do-not-touch>
 You may edit: <roles.<role>.paths, or what the work touches>   (read-only roles: "nothing")

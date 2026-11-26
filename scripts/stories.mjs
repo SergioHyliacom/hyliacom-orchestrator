@@ -12,6 +12,12 @@
 //   node stories.mjs --ready ID...   exit 1 if any named story is not ready to build
 //   node stories.mjs --pr ID         print a PR checklist for one story; exit 1 when its branch lacks a risk tag,
 //                                    or adds a suppression the --check above would fail on
+//   node stories.mjs --review ID COMMIT [--since REVIEWED | --base BASE]
+//                                    write the review pack of one story (or a task's slug) at one commit, in
+//                                    .orchestrator/work/ID/review-<commit>/: pack.md, diff.patch and the norms as
+//                                    the integration branch has them; --since makes it a re-review's, of the fix
+//                                    only; --base BASE starts the diff at BASE instead of the merge base.
+//                                    Exit 1 when HEAD is not that commit or a locked test changed after its lock
 //   node stories.mjs --json          print the computed state as JSON (for agents)
 //   node stories.mjs --summary       print only what needs attention (for the start of a session)
 //
@@ -19,7 +25,7 @@
 // configuration is stories.config.json there.
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -195,7 +201,8 @@ const rel = (p) => path.relative(DIR, p).split(path.sep).join("/");
 const activities = readJson(path.join(DIR, "activities.json"));
 
 // ---------- Git: what this branch adds to the integration branch
-const gitRun = (a) => { try { return execFileSync("git", a, { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString(); } catch { return null; } };
+// A story's whole diff can pass the 1 MB Node keeps by default, and a cut output would read as an empty one.
+const gitRun = (a) => { try { return execFileSync("git", a, { cwd: ROOT, maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }).toString(); } catch { return null; } };
 const orchestrator = existsSync(path.join(ROOT, ".orchestrator.json")) ? readJson(path.join(ROOT, ".orchestrator.json")) : {};
 // The branch the stories merge into: .orchestrator.json → git.integrationBranch, else the remote's default branch, else main.
 const INTEGRATION_BRANCH = orchestrator.git?.integrationBranch
@@ -342,7 +349,11 @@ const SUPPRESSION = [
 // The suppressions this branch adds and the human did not approve: [{ file, line, text }].
 function suppressions() {
   if (!AHEAD || SUPPRESSIONS_MODE === "off") return [];
-  const diff = gitRun(["-c", "core.quotepath=off", "diff", "-U0", "--no-color", "--no-ext-diff", MERGE_BASE, "HEAD"]) ?? "";
+  return addedSuppressions(MERGE_BASE, "HEAD").filter((s) => !s.approved);
+}
+// The suppressions the diff from → to adds, each with whether the human approved it: [{ file, line, text, approved }].
+function addedSuppressions(from, to) {
+  const diff = gitRun(["-c", "core.quotepath=off", "diff", "-U0", "--no-color", "--no-ext-diff", from, to]) ?? "";
   const found = [];
   let file = null, line = 0, header = false;
   for (const l of diff.split("\n")) {
@@ -360,11 +371,35 @@ function suppressions() {
   try { approved = readJson(SUPPRESSIONS_FILE); } catch { /* none yet */ }
   if (!Array.isArray(approved)) { errors.push(".orchestrator/suppressions.json must be a list of { file, line, reason }."); approved = []; }
   const ok = (s) => approved.some((a) => a?.file === s.file && String(a?.line ?? "").trim() === s.text && String(a?.reason ?? "").trim());
-  return found.filter((s) => !ok(s));
+  return found.map((s) => ({ ...s, approved: Boolean(ok(s)) }));
 }
 const suppressionLine = (s) => SUPPRESSIONS_MODE === "enforce"
   ? `${s.file}:${s.line} adds a suppression: ${s.text.slice(0, 160)}. A change does not switch off its own checks: remove it, or, on your human's ok, record it in .orchestrator/suppressions.json with its reason.`
   : `Note (gates.suppressions: observe): ${s.file}:${s.line} adds a suppression: ${s.text.slice(0, 160)}`;
+
+// ---------- Locked tests: a test changes only after the commit that unlocks it
+
+// .orchestrator/locked/<ID>.txt lists a story's acceptance tests under `# commit <sha>`, the commit they were locked
+// at (a list git does not track cannot date itself). The branch's own commits since then, up to tip, must leave
+// them alone: [{ file, lock, after: ["<short> <subject>"] }]. A merge of the integration branch brings commits
+// that are not this work, and they do not count.
+const LOCK_DIR = path.join(ROOT, ".orchestrator", "locked");
+const OWN = gitRun(["rev-parse", "--verify", "--quiet", INTEGRATION]) !== null ? ["--not", INTEGRATION] : [];
+function lockedChanges(list, tip) {
+  const listRel = path.relative(ROOT, list).split(path.sep).join("/");
+  const text = lf(readFileSync(list, "utf8"));
+  const header = text.match(/^#\s*commit\s+([0-9a-f]{7,40})\b/im)?.[1];
+  const headerLock = header ? gitRun(["rev-parse", "--verify", "--quiet", `${header}^{commit}`])?.trim() : null;
+  const files = text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  const changed = [];
+  for (const p of files) {
+    const lock = headerLock || gitRun(["log", "-1", "--format=%H", "-S", p, "--", listRel])?.trim();
+    if (!lock) continue;
+    const after = gitRun(["log", "--no-merges", "--format=%h %s", `${lock}..${tip}`, ...OWN, "--", p])?.trim();
+    if (after) changed.push({ file: p, lock, after: after.split("\n") });
+  }
+  return { listRel, files, lock: headerLock, changed };
+}
 
 // ---------- Context docs: what every session reads points to files and commands that exist
 
@@ -683,6 +718,139 @@ if (flag("--pr")) {
     ...s.criteria.map((c) => `- ${res(c)} **${c.id}** ${c.head.replace(/^\*\*[^*]+\*\*\s*/, "")}`)].join("\n"), stop ? 1 : 0);
 }
 
+// ---------- Review pack: what git can say about the commit under review, said once
+
+// The reviewers judge one commit, two at once, one per lens. What git says about that commit is mechanical: the diff,
+// its base, which commit carries which criterion, which risk paths and check configurations it touches, what it
+// switches off, whether a locked test moved, and the norms as the integration branch has them. This writes it once,
+// so both start from the same facts and spend their turns judging.
+// The norms, as the guard reads them (hooks/guard.mjs → NORMS), and the configuration of the checks (→ CHECK_CONFIG):
+// keep the two lists in step with it.
+const NORMS = Array.isArray(orchestrator.norms) ? orchestrator.norms : ["CLAUDE.md", "AGENTS.md", "CONTRIBUTING.md", "CODING_STANDARDS.md"];
+const CHECK_CONFIG = Array.isArray(orchestrator.gates?.protectedPaths) ? orchestrator.gates.protectedPaths : [
+  ".github/workflows/", "bitbucket-pipelines.yml", ".gitlab-ci.yml", "lefthook.yml", ".lefthook.yml", ".husky/",
+  ".pre-commit-config.yaml", "**/.golangci.*", "**/biome.json", "**/biome.jsonc", "**/eslint.config.*", "**/.eslintrc*",
+  "**/playwright.config.*", "**/vitest.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/phpunit.xml*",
+  "**/pytest.ini", "**/phpstan.neon*",
+];
+if (flag("--review")) {
+  const [id, ref] = listAfter("--review");
+  // --since: a re-review, of the fix since the commit reviewed before. --base: a first review from a given commit,
+  // when the story's work does not start at the merge base (git.mode manual: the commit HEAD was at the kickoff).
+  const sinceRef = listAfter("--since")[0];
+  const baseRef = listAfter("--base")[0];
+  if (!id || !ref || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || (flag("--since") && !sinceRef) || (flag("--base") && !baseRef) || (sinceRef && baseRef)) {
+    console.error("Usage: stories.mjs --review <story ID or task slug> <commit> [--since <the commit reviewed before> | --base <the commit the work starts from>]");
+    process.exit(2);
+  }
+  const sha = (r) => gitRun(["rev-parse", "--verify", "--quiet", `${r}^{commit}`])?.trim() || null;
+  const commit = sha(ref);
+  if (!commit) { console.error(`${ref} is not a commit in this repository: fetch it first.`); process.exit(2); }
+  const since = sinceRef ? sha(sinceRef) : null;
+  if (sinceRef && !since) { console.error(`${sinceRef} is not a commit in this repository.`); process.exit(2); }
+  const given = baseRef ? sha(baseRef) : null;
+  if (baseRef && !given) { console.error(`${baseRef} is not a commit in this repository.`); process.exit(2); }
+  const base = since ?? given ?? gitRun(["merge-base", commit, INTEGRATION])?.trim();
+  if (!base) { console.error(`${commit.slice(0, 7)} shares no history with origin/${INTEGRATION_BRANCH}: fetch the integration branch first.`); process.exit(2); }
+
+  const short = commit.slice(0, 7);
+  const story = stories.find((s) => s.id === id) ?? null;
+  const dir = path.join(ROOT, ".orchestrator", "work", id, `review-${short}`);
+  const relOut = (p) => path.relative(ROOT, p).split(path.sep).join("/");
+  const lines = (a) => (gitRun(["-c", "core.quotepath=off", ...a]) ?? "").split("\n").filter(Boolean);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+
+  const diffFile = path.join(dir, "diff.patch");
+  writeFileSync(diffFile, gitRun(["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-M", base, commit]) ?? "");
+  const changed = lines(["diff", "--name-status", "-M", base, commit]).map((l) => {
+    const [st, ...p] = l.split("\t");
+    return { status: st[0], file: p[p.length - 1], from: p.length > 1 ? p[0] : null };
+  });
+  let added = 0, removed = 0;
+  for (const l of lines(["diff", "--numstat", "-M", base, commit])) { const [a, d] = l.split("\t"); added += Number(a) || 0; removed += Number(d) || 0; }
+  const commits = lines(["log", "--no-merges", "--reverse", "--format=%h%x09%s", `${base}..${commit}`, ...OWN])
+    .map((l) => { const [h, ...s] = l.split("\t"); return { h, subject: s.join("\t") }; });
+  const criterionRe = story ? new RegExp(`\\b${escape(story.id)}\\.\\d+\\b`, "g") : null;
+  const tagPaths = Object.entries(RISK_PATHS).map(([tag, globs]) => [tag, asList(globs).map(globRe)]);
+  const tagsOf = (f) => tagPaths.filter(([, res]) => res.some((re) => re.test(f))).map(([tag]) => tag);
+  const checkRes = CHECK_CONFIG.map(globRe);
+  const supp = addedSuppressions(base, commit);
+  const lockList = path.join(LOCK_DIR, `${id}.txt`);
+  const lock = existsSync(lockList) ? lockedChanges(lockList, commit) : null;
+  const atHead = HEAD_SHA === commit;
+
+  // The norms the change is judged by are the integration branch's: a change does not rewrite them.
+  const onIntegration = lines(["ls-tree", "-r", "--name-only", INTEGRATION]);
+  const normFiles = [...new Set(NORMS.flatMap((n) => { const re = globRe(n); return onIntegration.filter((f) => re.test(f)); }))].slice(0, 100);
+  const normLines = [];
+  for (const f of normFiles) {
+    const text = gitRun(["show", `${INTEGRATION}:${f}`]);
+    if (text === null) continue;
+    const to = path.join(dir, "norms", f);
+    mkdirSync(path.dirname(to), { recursive: true });
+    writeFileSync(to, text);
+    normLines.push(`- ${f} → ${relOut(to)}`);
+  }
+  const adrs = [...decisions.values()].filter((d) => /^ADR-/.test(d.id) && !d.open);
+  const skills = path.join(ROOT, ".claude", "skills");
+  const guides = existsSync(skills) ? readdirSync(skills).filter((d) => /review/i.test(d) && existsSync(path.join(skills, d, "SKILL.md"))).map((d) => `.claude/skills/${d}/SKILL.md`) : [];
+
+  const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const md = [`# Review pack: ${id} at ${short}`, "",
+    `Commit: ${commit}`,
+    since ? `Re-review: the fix since ${since}, the commit reviewed before. Judge only this diff.` : given ? `Base: ${base}, the commit the work starts from.` : `Base: ${base}, the merge base with origin/${INTEGRATION_BRANCH}.`,
+    atHead ? "HEAD: at the commit. The working tree and the code graph describe it." : `HEAD: ${HEAD_SHA?.slice(0, 7) ?? "none"}, not the commit. Read files with \`git show ${short}:<path>\`, and do not use the code graph.`,
+    `Diff: ${relOut(diffFile)}, ${count(changed.length, "file")}, +${added} −${removed}.`, ""];
+  md.push("## Story", "");
+  if (story) {
+    md.push(`${story.id} ${story.title}: ${path.join(DIR, story.file)}`, `Risk tags: ${story.tags.join(", ") || "none"}`, "");
+    const last = (c) => c.kind === "test" ? ` (last saved test run: ${c.result === "noResults" ? "none" : c.result})` : "";
+    md.push(...story.criteria.map((c) => `- ${c.head}${last(c)}`));
+  } else md.push(`No story ${id}: a task. The brief says what it changes.`);
+  md.push("", "## Commits", "");
+  md.push(...(commits.length ? commits.map((c) => `- ${c.h} ${c.subject}`) : ["none"]));
+  if (story && !since) {
+    const carried = new Set(commits.flatMap((c) => c.subject.match(criterionRe) ?? []));
+    const none = story.criteria.map((c) => c.id).filter((c) => !carried.has(c));
+    md.push("", none.length ? `Criteria no commit names: ${none.join(", ")}.` : "Every criterion has a commit that names it.");
+  }
+  md.push("", "## Files", "", "Status (A added, M modified, D deleted, R renamed), the file, and the risk tags its riskPaths give it.", "");
+  for (const c of changed) {
+    const tags = tagsOf(c.file);
+    md.push(`- ${c.status} ${c.from ? `${c.from} → ` : ""}${c.file}${tags.length ? `  [${tags.join(", ")}]` : ""}`);
+  }
+  if (story) {
+    const missing = [...new Set(changed.flatMap((c) => tagsOf(c.file)))].filter((t) => !story.tags.includes(t));
+    if (missing.length) md.push("", `Risk tags these files carry and the story lacks: ${missing.join(", ")}.`);
+  }
+  md.push("", "## Locked tests", "");
+  if (!lock) md.push(story ? `No lock list (.orchestrator/locked/${id}.txt): the build is not closed.` : "A task has no lock list.");
+  else {
+    md.push(`${lock.listRel}: ${lock.files.length} files, locked at ${lock.lock ?? "an unknown commit (no `# commit` line)"}.`);
+    md.push(...(lock.changed.length ? lock.changed.map((c) => `- CHANGED AFTER THE LOCK: ${c.file}: ${c.after.join("; ")}`) : ["None changed after the lock."]));
+  }
+  md.push("", "## What the diff may switch off", "");
+  const suppLines = supp.map((s) => `- ${s.file}:${s.line} ${s.text.slice(0, 160)}${s.approved ? "  (approved in .orchestrator/suppressions.json)" : ""}`);
+  md.push("Suppressions it adds:", ...(suppLines.length ? suppLines : ["none"]));
+  const configs = changed.filter((c) => checkRes.some((re) => re.test(c.file)));
+  md.push("", "Check configuration it changes (the pipeline, the git hooks, the linters, the test runners):", ...(configs.length ? configs.map((c) => `- ${c.status} ${c.file}`) : ["none"]));
+  md.push("", `## The norms, as origin/${INTEGRATION_BRANCH} has them`, "");
+  md.push(...(normLines.length ? normLines : ["none found on the integration branch"]));
+  if (adrs.length) md.push("", "Decided ADRs:", ...adrs.map((d) => `- ${d.id} ${d.title} (${d.status || "no status"}): ${d.file}`));
+  if (guides.length) md.push("", "The project's review guide:", ...guides.map((g) => `- ${g}`));
+  if (orchestrator.verify?.mutation) md.push("", `Mutation testing: verify.mutation is \`${[].concat(orchestrator.verify.mutation).join(" && ")}\`.`);
+  const pack = path.join(dir, "pack.md");
+  writeFileSync(pack, md.join("\n") + "\n");
+
+  const problems = [];
+  if (!atHead) problems.push(`HEAD is ${HEAD_SHA?.slice(0, 7) ?? "none"}, not ${short}: check the commit out before the reviewers start, or they judge another tree.`);
+  for (const c of lock?.changed ?? []) problems.push(`${c.file} changed after its lock: ${c.after.join("; ")}. The review cannot approve this: reopen the build first.`);
+  for (const p of problems) console.error(p);
+  finish([`Review pack: ${relOut(pack)}`,
+    `${short} ${since ? `since ${since.slice(0, 7)}` : `on ${base.slice(0, 7)}`}: ${count(changed.length, "file")}, +${added} −${removed}, ${count(commits.length, "commit")}.`].join("\n"), problems.length ? 1 : 0);
+}
+
 const active = stories.filter((s) => s.status !== "discarded");
 const main = active.filter((s) => s.release === MAIN_RELEASE);
 const ok = main.filter((s) => s.status === "works").length;
@@ -749,22 +917,11 @@ if (flag("--check")) {
   }
   // A locked test changes only after the commit that unlocks it. This branch's own commits since a test's last
   // (re)lock must leave it alone: work done without the plugin, on another machine, fails here.
-  const lockDir = path.join(ROOT, ".orchestrator", "locked");
   const lists = [path.join(ROOT, ".orchestrator", "locked-tests.txt"),
-    ...(existsSync(lockDir) ? readdirSync(lockDir).filter((f) => f.endsWith(".txt")).map((f) => path.join(lockDir, f)) : [])].filter((f) => existsSync(f));
-  const own = gitRun(["rev-parse", "--verify", "--quiet", INTEGRATION]) !== null ? ["--not", INTEGRATION] : [];
-  if (HEAD_SHA && (AHEAD || !own.length)) for (const list of lists) {
-    const listRel = path.relative(ROOT, list).split(path.sep).join("/");
-    const text = lf(readFileSync(list, "utf8"));
-    // A list git does not track holds the commit it was locked at: `# commit <sha>`.
-    const header = text.match(/^#\s*commit\s+([0-9a-f]{7,40})\b/im)?.[1];
-    const headerLock = header ? gitRun(["rev-parse", "--verify", "--quiet", `${header}^{commit}`])?.trim() : null;
-    for (const p of text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))) {
-      const lock = headerLock || gitRun(["log", "-1", "--format=%H", "-S", p, "--", listRel])?.trim();
-      if (!lock) continue;
-      const after = gitRun(["log", "--no-merges", "--format=%h %s", `${lock}..HEAD`, ...own, "--", p])?.trim();
-      if (after) errors.push(`${p} is locked in ${listRel} and changed after its lock (${lock.slice(0, 7)}) with no unlock commit: ${after.split("\n").join("; ")}.`);
-    }
+    ...(existsSync(LOCK_DIR) ? readdirSync(LOCK_DIR).filter((f) => f.endsWith(".txt")).map((f) => path.join(LOCK_DIR, f)) : [])].filter((f) => existsSync(f));
+  if (HEAD_SHA && (AHEAD || !OWN.length)) for (const list of lists) {
+    const { listRel, changed } = lockedChanges(list, "HEAD");
+    for (const c of changed) errors.push(`${c.file} is locked in ${listRel} and changed after its lock (${c.lock.slice(0, 7)}) with no unlock commit: ${c.after.join("; ")}.`);
   }
 }
 

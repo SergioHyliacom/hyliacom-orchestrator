@@ -6,7 +6,7 @@ Plugin de Claude Code para desarrollar cualquier proyecto historia a historia, c
 - **Mandan las normas del proyecto.** Los documentos que pongas en `norms` (`CLAUDE.md`, `CONTRIBUTING.md`, sus estándares de código…) y sus ADR aceptados obligan siempre. El plugin los aplica y no relaja ninguno: si choca con ellos, ganan ellos. Donde el proyecto no dice nada, el plugin trae valores por defecto razonables (Conventional Commits, `feature/<id>-<slug>`, Squash).
 - **Las historias se escriben contigo** (skill `stories`), con sus criterios de aceptación, y viven en tu equipo.
 - **Un criterio cada vez.** El agente `builder` escribe el test, lo ve fallar, lo hace pasar y se para; la sesión comprueba las pruebas y hace el commit, o te lo da hecho para que lo hagas tú (ver «Dos formas de trabajar con git»). Tú das el ok en el primer criterio y en la construcción terminada.
-- **Cada PR lleva revisión** del agente `reviewer` antes de abrirse, más las aprobaciones de otras personas que pida el proyecto (`git.requiredApprovals`, 0 por defecto). Se fusiona con la estrategia que digas (Squash por defecto) y siempre con tu ok.
+- **Cada PR lleva revisión** de dos agentes `reviewer` a la vez antes de abrirse (uno mira los tests y los criterios, el otro el código), más las aprobaciones de otras personas que pida el proyecto (`git.requiredApprovals`, 0 por defecto). Se fusiona con la estrategia que digas (Squash por defecto) y siempre con tu ok.
 - **Dos formas de trabajar con git**, que eliges al prepararlo: que el orquestador haga los commits y los PR, o hacerlos tú a mano.
 - **GitHub y Bitbucket.** Cada proyecto dice cuál usa (`git.host`): en GitHub con `gh`; en Bitbucket, por su API.
 - **Una guardia** (un hook) impide lo peligroso: ningún agente hace commit, push ni merge; cada uno escribe solo donde le toca; nadie toca los tests bloqueados, las historias ni las normas del proyecto; y nada se salta los hooks de git ni fuerza un push.
@@ -90,24 +90,26 @@ Siguen el preset *balanced* de [gentle-ai](https://github.com/Gentleman-Programm
 |---|---|---|
 | Tu sesión, que es el orquestador | prepara el proyecto, escribe las historias contigo, propone las decisiones, encarga el trabajo a los agentes y comprueba lo que traen | el que tengas puesto en Claude Code; pensado para Opus (`/model opus`) |
 | `builder` | cada criterio, test primero | Sonnet |
-| `reviewer` | la revisión antes de cada PR | Sonnet |
+| `reviewer` | la revisión antes de cada PR, en dos partes a la vez: tests y criterios, y código | Sonnet, los dos |
 | `researcher` | las investigaciones de solo lectura | Sonnet |
 | `auditor` | la auditoría de cada entrega | Sonnet |
 
 Ningún agente fija el esfuerzo: cada uno usa el de su modelo por defecto. La guardia y el validador son scripts de Node y no usan ningún modelo.
+
+Para ganar velocidad sin perder criterio, la revisión se parte en dos que corren a la vez, cada una con menos que leer. Lo que git dice del commit lo prepara un script una sola vez (`stories.mjs --review`), y la sesión pone al día el grafo de código antes de lanzarlas. Además, todos los agentes lanzan juntas las lecturas que no dependen unas de otras.
 
 ## Contenido
 
 | Ruta | Qué es |
 |---|---|
 | `agents/builder.md` | El único agente que escribe código: un criterio o una tarea por encargo, en todas las capas que toque |
-| `agents/reviewer.md` | La revisión de cada PR: tests, criterios, código y el checklist del proyecto si tiene |
+| `agents/reviewer.md` | La revisión de cada PR, en dos partes que corren a la vez: tests y criterios por un lado; código, normas y el checklist del proyecto si tiene, por otro |
 | `agents/auditor.md` | Auditoría por muestreo al cerrar cada entrega, contra las normas del proyecto |
 | `agents/researcher.md` | Investigación de solo lectura |
 | `skills/orchestrate/` | El día a día de la sesión. Un núcleo corto (`SKILL.md`) y referencias que se leen solo cuando el trabajo las necesita (`references/`): preparar un proyecto, desarrollo, encargos a los agentes, trabajo fuera de las historias, auditoría, mapa de riesgo, compuertas, dónde vive cada cosa, git, y acceso a GitHub y Bitbucket |
 | `skills/que-hago/` | En qué punto estás y qué sigue: rama, historias, PR y bitácora. Claude la carga al empezar y cuando preguntas qué te toca |
 | `skills/stories/` | Cómo es una historia, sus criterios y sus marcas |
-| `scripts/stories.mjs` | El validador de historias y el generador del mapa. El proyecto no guarda copia: la sesión ejecuta el del plugin, y nunca va al pipeline |
+| `scripts/stories.mjs` | El validador de historias, el generador del mapa y el paquete de cada revisión (`--review`: el diff, los commits, los tests bloqueados y las normas, sacados de git una sola vez). El proyecto no guarda copia: la sesión ejecuta el del plugin, y nunca va al pipeline |
 | `hooks/guard.mjs` | La guardia |
 | `hooks/test-output.mjs` | La lectura de la salida de los tests y los checks (Go, Vitest, Playwright, `node --test`, tsc, Biome): si fallaron y qué falló |
 | `tests/` | Los tests de la guardia y de los scripts: `node --test "tests/*.test.mjs"` |
@@ -135,8 +137,8 @@ Las skills y los agentes van en inglés, como en el original: los lee el modelo.
 
 ## Estado
 
-- **Probado:** la guardia (escenarios simulados de cada rol, el cortocircuito del builder, las compuertas, las normas configurables, los merges de GitHub y de Bitbucket), la lectura de la salida de los tests y el validador (resultados de Go, Vitest y JUnit, y ADR en sus formatos habituales), con `node --test "tests/*.test.mjs"`. `claude plugin validate` pasa.
-- **Sin probar todavía:** las skills en un proyecto real que no sea EASY One, y el flujo de PR de GitHub de principio a fin. El primer proyecto sirve de piloto.
+- **Probado:** la guardia (escenarios simulados de cada rol, el cortocircuito del builder, las compuertas, las normas configurables, los merges de GitHub y de Bitbucket), la lectura de la salida de los tests y el validador (resultados de Go, Vitest y JUnit, y ADR en sus formatos habituales) y el paquete de revisión, con `node --test "tests/*.test.mjs"`. `claude plugin validate` pasa.
+- **Sin probar todavía:** las skills en un proyecto real que no sea EASY One, el flujo de PR de GitHub de principio a fin, y la revisión en dos partes a la vez. El primer proyecto sirve de piloto.
 
 ## Autores
 

@@ -32,6 +32,7 @@ You are an auditor. Your name and scope are in the brief (for example `auditor-e
 10. Mark a finding **RECURRING** when it appears in two or more stories (or modules) of the sample, or was accepted in a previous audit and is back.
 11. Style a linter could enforce is not a finding: report the missing lint rule instead. If there are no findings, say so plainly. Do not inflate. Do not launch subagents.
 12. **Check the risk map against the sample.** The brief gives `.orchestrator.json` → `riskTags` and `riskPaths`, `.orchestrator/risk-map.md` with their reasons, and `references/risk-map.md` with what each category covers. Under **Risk map**, list each story of the sample whose diff changed code of a risk category without that tag, and each file of the sample that carries a category no `riskPaths` entry covers. Each line is the entry that would close the gap: tag, path, and why, with `file:line`. The map only grows here: never propose removing an entry.
+13. **Read in parallel.** Reads, searches and commands that do not need each other's result go out together, in one turn: they run at the same time (the stories of the sample, their diffs, the sections of the norms). Go one by one only when the next step needs what the last one returned.
 
 ## Output
 
