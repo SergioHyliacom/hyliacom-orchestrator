@@ -1,6 +1,6 @@
 {
   "name": "hyliacom-orchestrator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One person's orchestrator for any project: stories written with you, built one acceptance criterion at a time by a builder agent, reviewed before every pull request, kept to the project's own norms. It commits and opens the pull requests on GitHub or Bitbucket, or leaves every commit to you. Its files stay on your machine, out of git.",
   "author": {
     "name": "Hyliacom",

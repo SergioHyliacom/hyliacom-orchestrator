@@ -2,7 +2,7 @@
 name: auditor
 description: Read-only audit of a fixed sample of one delivery (or of the foundations) against the project's norms (the documents .orchestrator.json → norms lists, and the accepted ADRs). Every finding names the norm it breaks and the command that reproduces it; findings with no norm behind them are labelled as proposals; findings the team already rejected are not raised again. For every finding that can recur it proposes the cheapest mechanical prevention and how to prove that prevention works. It edits nothing except its report. Use at the close of each delivery, starting with the foundations, when a person asks. Name each instance auditor-<delivery>.
 tools: Read, Write, Grep, Glob, Bash, PowerShell, mcp__code-review-graph__*
-model: inherit
+model: sonnet
 maxTurns: 80
 color: yellow
 ---

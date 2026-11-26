@@ -2,7 +2,7 @@
 name: reviewer
 description: "Independent read-only review of one story (or one task) against its acceptance criteria and the project's norms. Checks that the tests really observe each criterion, then story compliance, then correctness and security, then the project's own checklist when it has one. It edits nothing except its report. Use before every pull request opens. The story's risk tags say where to look first. Name each instance reviewer-<story ID or task slug>."
 tools: Read, Write, Grep, Glob, Bash, PowerShell, mcp__code-review-graph__*
-model: inherit
+model: sonnet
 maxTurns: 60
 color: red
 ---

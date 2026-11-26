@@ -82,6 +82,20 @@ Solo para el modo `pr`.
 
 El token nunca se escribe en el chat ni en un fichero. Sin acceso sigues trabajando igual: los PR se abren y fusionan desde la web, y Claude te da el título, el cuerpo y la estrategia.
 
+## Modelos
+
+Siguen el preset *balanced* de [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai): el modelo grande para orquestar y decidir, Sonnet para el trabajo que se repite. No se elige al instalar.
+
+| Quién | Qué hace | Modelo |
+|---|---|---|
+| Tu sesión, que es el orquestador | prepara el proyecto, escribe las historias contigo, propone las decisiones, encarga el trabajo a los agentes y comprueba lo que traen | el que tengas puesto en Claude Code; pensado para Opus (`/model opus`) |
+| `builder` | cada criterio, test primero | Sonnet |
+| `reviewer` | la revisión antes de cada PR | Sonnet |
+| `researcher` | las investigaciones de solo lectura | Sonnet |
+| `auditor` | la auditoría de cada entrega | Sonnet |
+
+Ningún agente fija el esfuerzo: cada uno usa el de su modelo por defecto. La guardia y el validador son scripts de Node y no usan ningún modelo.
+
 ## Contenido
 
 | Ruta | Qué es |

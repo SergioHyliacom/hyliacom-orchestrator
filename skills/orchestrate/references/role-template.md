@@ -2,7 +2,7 @@
 name: <role>
 description: "<What it does, in one sentence. When the orchestrator uses it. Name each instance <role>-<scope>.>"
 tools: <Read, Write, Grep, Glob for read-only roles (Write is for the report only); add Edit only for roles that own a deliverable; add Bash/PowerShell only if it must run commands>
-model: <inherit for judgement-heavy roles, sonnet for reading-heavy roles>
+model: <sonnet: every role runs on Sonnet; only the session that orchestrates runs on Opus>
 maxTurns: <60 is a sound default>
 ---
 
